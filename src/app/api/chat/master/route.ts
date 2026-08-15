@@ -50,8 +50,53 @@ const MODELS: ModelConfig[] = [
   { id: "or-qwen-coder", name: "Qwen 3 Coder", url: "https://openrouter.ai/api/v1/chat/completions", model: "qwen/qwen3-coder:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["coding", "reasoning"] },
   { id: "llm7-gemini", name: "Gemini Flash", url: "https://api.llm7.io/v1/chat/completions", model: "gemini-3.1-flash-lite", tags: ["fast", "general", "knowledge"] },
   { id: "gemini", name: "Gemini 2.5 Flash", url: "gemini", model: "gemini-2.5-flash", key: process.env.GEMINI_API_KEY || "", tags: ["reasoning", "knowledge", "general", "creative", "fast"] },
+  { id: "cerebras-gptoss", name: "Cerebras GPT-OSS 120B", url: "https://api.cerebras.ai/v1/chat/completions", model: "gpt-oss-120b", key: process.env.CEREBRAS_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "math", "general"] },
+  { id: "cerebras-glm", name: "Cerebras GLM 4.7", url: "https://api.cerebras.ai/v1/chat/completions", model: "zai-glm-4.7", key: process.env.CEREBRAS_API_KEY || "", tags: ["reasoning", "knowledge", "general"] },
+  { id: "deepseek-chat", name: "DeepSeek Chat", url: "https://api.deepseek.com/v1/chat/completions", model: "deepseek-chat", key: process.env.DEEPSEEK_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "general"] },
   { id: "pollinations", name: "GPT-OSS Fast", url: "https://text.pollinations.ai/openai", model: "openai-fast", tags: ["fast", "general"] },
 ];
+
+// Capability ranking — models with keys available are preferred in this order
+// (best/smartest first). Used to auto-pick the strongest models for a request.
+const MODEL_PRIORITY: string[] = [
+  "gemini",
+  "groq-llama",
+  "cerebras-gptoss",
+  "cerebras-glm",
+  "or-nemotron-ultra",
+  "or-gptoss",
+  "groq-gptoss",
+  "or-deepseek",
+  "deepseek-chat",
+  "or-nemotron",
+  "or-gemma",
+  "bl-deepseek",
+  "bl-qwen",
+  "af-mistral",
+  "llm7-gemini",
+  "or-qwen-coder",
+  "pollinations",
+];
+
+/** Only models whose key is actually set (or keyless) are "available". */
+function availableModels(all: ModelConfig[]): ModelConfig[] {
+  return all.filter((m) => {
+    if (m.url === "gemini") return !!m.key;
+    if (m.url.includes("openrouter")) return !!m.key; // OR needs a key
+    if (m.key) return !!m.key;          // provider requiring a key
+    return true;                        // keyless (llm7, pollinations, etc.)
+  });
+}
+
+/** Rank available models by capability, best first. */
+function rankByPriority(list: ModelConfig[]): ModelConfig[] {
+  const sorted = [...list].sort((a, b) => {
+    const ia = MODEL_PRIORITY.indexOf(a.id);
+    const ib = MODEL_PRIORITY.indexOf(b.id);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+  return sorted;
+}
 
 // ─── ORCHESTRATOR: Classify question ───
 interface Classification {
@@ -67,22 +112,31 @@ interface Classification {
 type Mode = "fast" | "balanced" | "deep";
 
 function selectAgentsByMode(classification: Classification, mode: Mode, available: ModelConfig[]): ModelConfig[] {
+  const av = availableModels(available);
+  const ranked = rankByPriority(av);
+
   if (mode === "fast") {
-    return available.filter((m) => m.id === "groq-llama").slice(0, 1);
+    // Fast: just the single best available model.
+    return ranked.slice(0, 1);
   }
+
+  const needs = classification.selectedTags;
+
   if (mode === "balanced") {
-    if (!classification.needsConsensus) return available.filter((m) => m.id === "groq-llama");
-    const matching = available.filter((m) => m.tags.some((t: string) => classification.selectedTags.includes(t)));
-    const valid = matching.filter((m) => m.key || !m.url.includes("openrouter"));
-    const selected = valid.slice(0, 4);
-    if (!selected.find((m) => m.id === "groq-llama") && available.find((m) => m.id === "groq-llama")) selected.unshift(available[0]);
-    return selected.slice(0, 4);
+    if (!classification.needsConsensus) {
+      // Simple question: best 1 model.
+      return ranked.slice(0, 1);
+    }
+    // Consensus: take best models that match the task tags, up to 4.
+    const matching = ranked.filter((m) => m.tags.some((t) => needs.includes(t)));
+    const pool = matching.length ? matching : ranked;
+    return pool.slice(0, 4);
   }
-  const matching = available.filter((m) => m.tags.some((t: string) => classification.selectedTags.includes(t)));
-  const valid = matching.filter((m) => m.key || !m.url.includes("openrouter"));
-  const selected = valid.slice(0, 6);
-  if (!selected.find((m) => m.id === "groq-llama") && available.find((m) => m.id === "groq-llama")) selected.unshift(available[0]);
-  return selected.slice(0, 6);
+
+  // deep: best 5 that match, fall back to any available.
+  const matching = ranked.filter((m) => m.tags.some((t) => needs.includes(t)));
+  const pool = matching.length ? matching : ranked;
+  return pool.slice(0, 5);
 }
 
 function classifyQuestion(question: string): Classification {
@@ -281,10 +335,11 @@ export async function POST(req: Request) {
   const authUser = await getUser(req);
   const planConfig = authUser ? await getPlanConfig(authUser) : null;
 
-  // Filter models based on user's plan (free users get fewer models)
-  const accessibleModels = planConfig
+  // Filter models by plan, then keep only the ones with keys actually set.
+  const planFiltered = planConfig
     ? MODELS.filter((m) => isModelAllowed(m.id, planConfig))
-    : MODELS; // no auth = all models (preview mode)
+    : MODELS;
+  const accessibleModels = availableModels(planFiltered);
 
   // Check usage limits for non-admin
   if (authUser && authUser.plan !== "admin") {
@@ -313,10 +368,11 @@ Answer the user's question with detail, accuracy, and genuine usefulness. Give r
   const selectedAgents = selectAgentsByMode(classification, mode, accessibleModels);
 
   // ─── STEP 3a: SIMPLE question → single model, no consensus ───
-  if (!classification.needsConsensus && selectedAgents.length <= 1) {
-    // Prefer Gemini (smartest free model) when a key is set; fall back to Groq.
+  if (!classification.needsConsensus) {
+    const best = selectedAgents[0];
+    // Prefer Gemini (smartest free model) when a key is set; fall back to others.
     const gemKey = process.env.GEMINI_API_KEY || "";
-    if (gemKey) {
+    if (gemKey && (!best || best.id !== "gemini")) {
       try {
         const gres = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(gemKey)}`,
@@ -340,26 +396,16 @@ Answer the user's question with detail, accuracy, and genuine usefulness. Give r
         }
       } catch {}
     }
-    try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          stream: false,
-          messages: [{ role: "system", content: baseSystem }, ...b.messages],
-          temperature: 0.7,
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      const text = d?.choices?.[0]?.message?.content;
-      if (res.ok && text) {
+    // Fall back to the next best available model if Gemini failed.
+    if (best) {
+      const r2 = await callModel(best, baseSystem, b.messages, 15000);
+      if (r2.text) {
         if (authUser) logUsage({ userId: authUser.id, type: classification.type, mode, success: true }).catch(() => {});
-        return new Response(text, {
-          headers: { "Content-Type": "text/plain; charset=utf-8", "X-Orchestrator": classification.reasoning, ...corsHeaders },
+        return new Response(r2.text, {
+          headers: { "Content-Type": "text/plain; charset=utf-8", "X-Orchestrator": classification.reasoning, "X-Model": best.name, ...corsHeaders },
         });
       }
-    } catch {}
+    }
   }
 
   // ─── STEP 3b: COMPLEX question → multi-agent consensus pipeline ───
