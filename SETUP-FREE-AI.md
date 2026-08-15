@@ -277,3 +277,76 @@ Fresh jawab ke do hi tareeqe hain:
 2. **Grounded models** — Gemini ka apna Google Search built-in hai
 
 Isi liye **Gemini key sabse zaroori hai** — sirf naye knowledge ki wajah se nahi, balke uski search grounding ki wajah se.
+
+---
+
+## 🚀 Vercel deployment — live status (16 Aug 2026)
+
+**Site:** https://my-ai-agent-flame-psi.vercel.app
+
+### ✅ Deploy ho gaya, aur live par sahi jawab aa rahe hain
+
+| Test | Live jawab |
+|---|---|
+| "Who is the current US president?" | **Donald Trump** (Aug 15, 2026) ✅ |
+| "Pakistan ka current PM kaun hai?" | **Shehbaz Sharif** ✅ |
+| "Aaj konsa saal? 1990 wale ki umar?" | **2026 / 36 saal** ✅ |
+| "JS me array reverse function" | saaf code, Roman Urdu ✅ |
+
+**Push se pehle live site ye de raha tha:**
+> *"As of my knowledge cutoff in 2023, the President is **Joe Biden**"* ❌
+
+Wajah: fixes local commits me the, push nahi hue the — Vercel purana code chala raha tha.
+
+### ⚠️ Ek env var missing hai
+
+Live health check (`/api/health/models`) ye bata raha hai:
+
+```
+providers: Google, Groq, AirForce, BazaarLink
+missing:   OPENROUTER_API_KEY   ← ye set karein
+```
+
+Aapne OpenRouter key bheji thi magar **Vercel me set nahi hai**. Ye add karne se 8 aur models mil jayenge (Laguna S 2.1 — Nov 2025, Dots 3 Note — Dec 2025), aur cascade ke liye ek extra provider bhi.
+
+**Vercel → Settings → Environment Variables → Add:**
+```
+OPENROUTER_API_KEY = sk-or-v1-...
+```
+Phir Redeploy.
+
+Aur **BazaarLink + AirForce hata dein** — dono bekaar hain (credits khatam / Sept 2021 cutoff).
+
+---
+
+## 📚 Un 3 repos se kya mila
+
+Aapne jo repos batayi thi, teeno check ki:
+
+| Repo | Nateeja |
+|---|---|
+| **cheahjs/free-llm-api-resources** | ✅ Sabse kaam ki. 5 naye providers mile |
+| **public-apis/public-apis** | ⚠️ 234 KB general APIs (weather, movies) — LLM-specific kuch naya nahi |
+| **Ronakkadhi/awesome-ai-apis** | ⚠️ Sirf 7 providers (OpenAI, Anthropic, Google, Groq, Mistral, OpenRouter, ElevenLabs) — sab pehle se hain. Ye Requestly test collections hain, API list nahi |
+
+### Jo add kiya (optional — key set karo to khud on ho jayenge)
+
+| Provider | Free tier |
+|---|---|
+| Cloudflare Workers AI | 10,000 neurons/day |
+| Mistral La Plateforme | free tier, 1 req/sec |
+| Cohere | 1,000 req/month |
+| SambaNova | free tier, bohot tez |
+| Scaleway | 1,000,000 free tokens |
+
+Inke liye kuch karna nahi — `envKey` khali ho to registry khud skip kar deta hai.
+
+### Jo test kar ke REJECT kiya
+
+| Provider | Wajah |
+|---|---|
+| **GitHub Models** | `410 github_models_retirement_brownout` — GitHub isay band kar raha hai |
+| **OVH AI Endpoints** | Keyless hai magar har baar `429` — bharosa nahi |
+| **HuggingFace router** | Ab token maangta hai (`401`) |
+
+**Khulasa:** aapke paas pehle se Gemini + Groq + OpenRouter hain — yehi 3 kaafi hain. Baaki lists mein zyadatar wahi providers hain ya aise jinke liye nayi keys chahiye.
