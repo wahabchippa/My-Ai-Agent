@@ -36,6 +36,7 @@ import { getUser, getPlanConfig, isModelAllowed, checkUsageLimit, logUsage } fro
 import { REGISTRY, available, hasRealProvider, configuredProviders, isStale, type Entry } from "@/lib/modelRegistry";
 import { buildSystem, callModel, raceModels, type Msg } from "@/lib/aiCall";
 import { research, needsResearch } from "@/lib/research";
+import { sanitizeMessages } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -160,7 +161,15 @@ export async function POST(req: Request) {
     });
   }
 
-  const messages: Msg[] = b.messages;
+  // ─── SANITIZE ───
+  // Nexora har message KAI providers ko bhejta hai (Google, Groq, OpenRouter).
+  // Agar user galti se API key ya card paste kar de, wo teen company ke logs
+  // me chala jata — aur free tiers me prompts training ke liye bhi use hote
+  // hain. Is liye bhejne se PEHLE saaf karte hain.
+  // aggressive:false — email/phone rehne dete hain, warna "email validate
+  // karne ka regex likho" jaise sawal toot jate hain.
+  const clean = sanitizeMessages(b.messages as Msg[], { aggressive: false });
+  const messages: Msg[] = clean.messages;
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const mode: Mode = (b.mode as Mode) || "balanced";
 
@@ -242,6 +251,7 @@ export async function POST(req: Request) {
     "X-Nexora-Research": researchData ? `${researchData.length} chars` : "none",
     "X-Nexora-Providers": configuredProviders().join(",") || "none",
     "X-Nexora-Ms": String(Date.now() - t0),
+    ...(clean.redacted ? { "X-Nexora-Redacted": clean.kinds.join(",") } : {}),
     ...extra,
     ...corsHeaders,
   });
@@ -334,19 +344,33 @@ export async function POST(req: Request) {
     buildSystem({ research: researchData }) +
     `
 
-════════ SYNTHESIS TASK ════════
-Multiple AI models answered the same question. Your job:
+════════ JUDGE + SYNTHESIS TASK ════════
+Multiple AI models answered the same question independently. Act as an
+impartial judge first, then a synthesizer.
 
-1. VERIFY — compare them; find contradictions and factual errors.
-2. CROSS-CHECK — where web research is provided above, it WINS over any
-   model's claim. Models may be working from outdated training data.
-3. SYNTHESIZE — merge the best, most accurate parts into ONE answer.
+STEP 1 — SCORE each candidate silently on:
+  • Factual accuracy (does web research above support or contradict it?)
+  • Completeness (does it actually answer what was asked?)
+  • Specificity (real numbers, working code, concrete examples — not filler)
+  • Internal consistency (does it contradict itself?)
+
+STEP 2 — RESOLVE disagreements:
+  • Time-sensitive fact + web research available → research WINS, always.
+  • Time-sensitive fact + NO research → say the fact may have changed
+    rather than confidently picking one model's memory.
+  • Technical/code disagreement → prefer the one that is verifiably correct,
+    not the one that sounds more confident.
+  • If a candidate contradicts the majority AND the research, discard it
+    entirely instead of averaging it in.
+
+STEP 3 — SYNTHESIZE one definitive answer that keeps the strongest parts
+of each and drops everything you scored as weak or wrong.
 
 RULES:
-- Write as the final answer. Never mention "models", "agents", or "answers".
-- If they disagree on a time-sensitive fact, trust web research; if there is
-  none, state the uncertainty rather than picking one confidently.
-- Keep every genuinely useful specific (numbers, code, examples).`;
+- Write as the final answer. Never mention "models", "agents", "candidates",
+  or the scoring you just did.
+- Keep every genuinely useful specific (numbers, code, examples).
+- A shorter correct answer beats a longer padded one.`;
 
   const masterInput = `USER'S QUESTION: ${lastUser}\n\nCANDIDATE ANSWERS:\n${combined}\n\nWrite the definitive final answer:`;
 
