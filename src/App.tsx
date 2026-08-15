@@ -7,11 +7,13 @@ import { Navigation } from "./components/layout/Navigation";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";
 import { AuthScreen } from "./components/auth/AuthScreen";
-import { ChatInterface } from "./components/chat/ChatInterface";
+import { ChatView } from "./components/ChatView";
+import { ModelsView } from "./components/ModelsView";
+import { StudioView } from "./components/StudioView";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { cn } from "./utils/cn";
 
-export type ViewType = "chat" | "projects" | "workspace" | "admin" | "settings";
+export type ViewType = "chat" | "models" | "projects" | "workspace" | "studio" | "admin" | "settings";
 
 function AppShell() {
   const { user, loading, logout } = useAuth();
@@ -91,7 +93,9 @@ function AppShell() {
         />
 
         <div className="flex-1 overflow-hidden">
-          {view === "chat" && <ChatInterface />}
+          {view === "chat" && <ChatView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "models" && <ModelsView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "studio" && <StudioView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
           {view === "projects" && <ComingSoon title="Projects" />}
           {view === "workspace" && <ComingSoon title="Coding Workspace" />}

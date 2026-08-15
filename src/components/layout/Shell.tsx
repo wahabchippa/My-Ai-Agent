@@ -8,7 +8,7 @@ import { TopBar } from "./TopBar";
 import { LoginScreen } from "../auth/LoginScreen";
 import { cn } from "@/utils/cn";
 
-export type ViewType = "chat" | "projects" | "workspace" | "admin" | "settings";
+export type ViewType = "chat" | "models" | "projects" | "workspace" | "studio" | "admin" | "settings";
 
 interface ShellProps {
   children?: React.ReactNode;
