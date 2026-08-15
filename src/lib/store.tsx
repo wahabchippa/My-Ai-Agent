@@ -165,7 +165,8 @@ function load(): Persisted {
         return {
           conversations: parsed.conversations,
           model: parsed.model ?? "sonnet",
-          theme: parsed.theme ?? "light",
+          // Force the clean light theme; ignore any stale saved "dark".
+          theme: "light",
           personality: parsed.personality ?? "claude",
           apiKeys,
           activeSlot,

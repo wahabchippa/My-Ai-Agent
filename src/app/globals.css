@@ -21,12 +21,12 @@
   --color-border: #e6e6eb;            /* default borders          */
   --color-border-glow: #d9d9e0;       /* hover borders            */
 
-  /* ─── Accent: Refined Indigo ─── */
-  --color-accent: #4f46e5;            /* primary accent           */
-  --color-accent-soft: #4f46e51a;     /* 10% tint for chips/fills */
-  --color-accent-glow: #4f46e52e;     /* glow / focus ring        */
-  --color-accent-hover: #4338ca;      /* hover                    */
-  --color-accent-dim: #7c7cf0;        /* lighter accent           */
+  /* ─── Accent: Warm Cream / Coral ─── */
+  --color-accent: #d97757;            /* warm cream-coral accent   */
+  --color-accent-soft: #d977571a;     /* 10% tint for chips/fills */
+  --color-accent-glow: #d977572e;     /* glow / focus ring        */
+  --color-accent-hover: #c15f3f;      /* hover                    */
+  --color-accent-dim: #e0976b;        /* lighter accent           */
 
   /* ─── Secondary: Calm Violet ─── */
   --color-nebula: #7c5cf0;
@@ -59,9 +59,9 @@
   --color-light-muted: #8e8e98;
 
   /* ─── Gradients ─── */
-  --gradient-accent: linear-gradient(135deg, #4f46e5 0%, #7c5cf0 100%);
-  --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f8f8fa 100%);
-  --gradient-glow: radial-gradient(ellipse at center, #4f46e50f 0%, transparent 70%);
+  --gradient-accent: linear-gradient(135deg, #d97757 0%, #e0976b 100%);
+  --gradient-surface: linear-gradient(180deg, #ffffff 0%, #faf7f2 100%);
+  --gradient-glow: radial-gradient(ellipse at center, #d977570f 0%, transparent 70%);
 
   /* ─── Brand Custom Colors (used across components) ───
      Warm cream surfaces + ink text + coral accent. Now first-class tokens
@@ -136,29 +136,29 @@ html, body, #root {
   --color-subtle: #242430;
   --color-border: #2a2a38;
   --color-border-glow: #3a3a4a;
-  --color-accent: #00d4ff;
-  --color-accent-soft: #00d4ff20;
-  --color-accent-glow: #00d4ff40;
-  --color-accent-hover: #00b8e6;
-  --color-accent-dim: #008fb3;
-  --color-nebula: #8b5cf6;
-  --color-nebula-soft: #8b5cf620;
-  --color-nebula-glow: #8b5cf640;
+  --color-accent: #e08b63;
+  --color-accent-soft: #e08b6320;
+  --color-accent-glow: #e08b6340;
+  --color-accent-hover: #d97757;
+  --color-accent-dim: #f0a67e;
+  --color-nebula: #b59ad9;
+  --color-nebula-soft: #b59ad920;
+  --color-nebula-glow: #b59ad940;
   --color-success: #10b981;
   --color-success-soft: #10b98120;
   --color-warning: #f59e0b;
   --color-warning-soft: #f59e0b20;
   --color-danger: #ef4444;
   --color-danger-soft: #ef444420;
-  --color-info: #3b82f6;
-  --color-info-soft: #3b82f620;
-  --color-text: #f0f0f5;
-  --color-text-secondary: #a0a0b0;
-  --color-text-muted: #606070;
-  --color-text-dim: #404050;
-  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
-  --gradient-surface: linear-gradient(180deg, #1a1a24 0%, #12121a 100%);
-  --gradient-glow: radial-gradient(ellipse at center, #00d4ff10 0%, transparent 70%);
+  --color-info: #60a5fa;
+  --color-info-soft: #60a5fa20;
+  --color-text: #f5f0ec;
+  --color-text-secondary: #b5aaa2;
+  --color-text-muted: #7a7068;
+  --color-text-dim: #4f4a44;
+  --gradient-accent: linear-gradient(135deg, #e08b63 0%, #d97757 100%);
+  --gradient-surface: linear-gradient(180deg, #1c1815 0%, #14110e 100%);
+  --gradient-glow: radial-gradient(ellipse at center, #e08b6310 0%, transparent 70%);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);

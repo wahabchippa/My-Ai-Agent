@@ -26,10 +26,13 @@ function AppShell() {
     document.documentElement.classList.add(theme);
   }, [theme]);
 
-  // Load saved theme
+  // Load saved theme — but only respect "light"; ignore stale "dark" so the
+  // new clean light design shows even if the browser cached an old dark pref.
   useEffect(() => {
     const saved = localStorage.getItem("nexora-theme") as "dark" | "light" | null;
-    if (saved) setTheme(saved);
+    if (saved === "light") setTheme("light");
+    else setTheme("light");
+    localStorage.setItem("nexora-theme", "light");
   }, []);
 
   const toggleTheme = () => {
