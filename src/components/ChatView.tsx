@@ -8,7 +8,7 @@ import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
-import { ClaudeLogo, MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
+import { MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -151,15 +151,15 @@ export function ChatView({
     if (!realConfig) {
       try {
         patchMessage(convId, assistantId, {
-          thinking: ["🎯 Orchestrator analyzing your question..."],
+          thinking: ["Analyzing your question"],
         });
         await delay(600);
         patchMessage(convId, assistantId, {
-          thinking: ["🎯 Orchestrator analyzing...", "🤖 Selecting best AI agents for this task..."],
+          thinking: ["Selecting the best AI models for this task"],
         });
         await delay(500);
         patchMessage(convId, assistantId, {
-          thinking: ["🎯 Orchestrator analyzing...", "🤖 Selected agents working in parallel...", "🔍 Web research..."],
+          thinking: ["Running models in parallel", "Cross-checking with web research"],
         });
 
         const res = await fetch("/api/chat/master", {
@@ -399,7 +399,7 @@ export function ChatView({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-coral">
-            <ClaudeLogo size={20} />
+            <img src="/nexora-logo.png" alt="Nexora" className="h-5 w-5 rounded-full object-cover" />
           </span>
           <span className="hidden text-[15px] font-semibold tracking-tight text-ink dark:text-cream sm:inline">
             Nexora
@@ -556,10 +556,10 @@ function HomeView({
             className="flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
             style={{ backgroundColor: p.color }}
           >
-            {isClaude ? <ClaudeLogo size={30} /> : <span className="text-[30px]">{p.emoji}</span>}
+            {isClaude ? <img src="/nexora-logo.png" alt="Nexora" className="h-8 w-8 rounded-full object-cover" /> : <span className="text-[30px]">{p.emoji}</span>}
           </div>
           <h1 className="mt-5 font-serif text-[28px] font-normal text-ink dark:text-cream">
-            <span style={{ color: p.color }}>{isClaude ? "✻ " : `${p.emoji} `}</span>
+            <span style={{ color: p.color }}>{isClaude ? "" : `${p.emoji} `}</span>
             {isClaude ? greetingText : `Meet ${p.name}`}
           </h1>
           <p className="mt-1.5 text-[15px] text-muted">

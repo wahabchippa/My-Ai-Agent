@@ -4,7 +4,6 @@ import type { Message } from "../lib/store";
 import { getModel } from "../lib/models";
 import { speak, stopSpeaking } from "../lib/voice";
 import {
-  ClaudeLogo,
   CopyIcon,
   CheckIcon,
   RefreshIcon,
@@ -48,41 +47,50 @@ function ThinkingTrace({
   done: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const current = lines[lines.length - 1] || "Thinking";
   return (
-    <div className="mb-2.5 overflow-hidden rounded-xl border border-line bg-cream/60 dark:border-night-surface dark:bg-night/50">
+    <div className="mb-2.5 overflow-hidden rounded-xl border border-line bg-cream/70 dark:border-night-surface dark:bg-night/50">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-muted"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-cream-deep/60 dark:hover:bg-night-surface/40"
       >
+        {done ? (
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-coral">
+            <CheckIcon size={14} />
+          </span>
+        ) : (
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+            <span className="h-3.5 w-3.5 rounded-full border-2 border-coral/25 border-t-coral animate-spin" />
+          </span>
+        )}
+        <span className="text-[13px] font-medium text-ink dark:text-cream">
+          {done ? "Done" : current}
+        </span>
         <ChevronRight
           size={14}
-          className={cn("transition-transform", open && "rotate-90")}
+          className={cn("ml-auto text-muted-2 transition-transform", open && "rotate-90")}
         />
-        {done ? "Thought for a moment" : "Thinking…"}
       </button>
-      {open && (
-        <div className="animate-fade px-4 pb-3 pt-0.5 text-[13px] leading-relaxed text-muted">
-          {lines.map((l, i) => (
-            <p key={i} className="flex gap-2 py-0.5">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-coral/50" />
-              <span>{l}</span>
-            </p>
-          ))}
-          {!done && (
-            <p className="flex items-center gap-1.5 py-0.5 text-muted-2">
-              <span className="flex gap-1">
-                <span className="dot h-1.5 w-1.5 rounded-full bg-coral" />
-                <span
-                  className="dot h-1.5 w-1.5 rounded-full bg-coral"
-                  style={{ animationDelay: "0.15s" }}
-                />
-                <span
-                  className="dot h-1.5 w-1.5 rounded-full bg-coral"
-                  style={{ animationDelay: "0.3s" }}
-                />
-              </span>
-            </p>
-          )}
+      {open && !done && (
+        <div className="px-4 pb-3">
+          <div className="space-y-1.5">
+            {lines.map((l, i) => {
+              const isCurrent = i === lines.length - 1;
+              return (
+                <div key={i} className="flex items-center gap-2.5 text-[13px]">
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full transition",
+                      isCurrent ? "bg-coral" : "bg-coral/40"
+                    )}
+                  />
+                  <span className={isCurrent ? "text-ink dark:text-cream" : "text-muted"}>
+                    {l}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -209,7 +217,7 @@ export function MessageItem({
         className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
         style={{ backgroundColor: pers ? pers.color : "#D97757" }}
       >
-        {isClaude ? <ClaudeLogo size={17} /> : <span className="text-[15px]">{pers!.emoji}</span>}
+        {isClaude ? <img src="/nexora-logo.png" alt="Nexora" className="h-5 w-5 rounded-full object-cover" /> : <span className="text-[15px]">{pers!.emoji}</span>}
       </div>
       <div className="min-w-0 flex-1">
         {model?.thinks && msg.thinking && msg.thinking.length > 0 && (
