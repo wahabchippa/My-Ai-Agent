@@ -420,7 +420,7 @@ function ChatInput({ value, onChange, onSend, onStop, streaming, inputRef, mode,
     <div className="border-t border-border bg-surface px-4 py-3">
       <div className="mx-auto max-w-3xl">
         {/* Input box */}
-        <div className="relative rounded-2xl border border-border bg-elevated focus-within:border-accent transition">
+        <div className="relative rounded-2xl border border-border bg-surface shadow-sm focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-soft transition">
           {/* Mode pills (mobile) */}
           <div className="flex items-center gap-1 px-3 pt-2 md:hidden">
             {(["fast", "balanced", "deep"] as AIMode[]).map((m) => (
@@ -430,7 +430,7 @@ function ChatInput({ value, onChange, onSend, onStop, streaming, inputRef, mode,
                 className={cn(
                   "rounded-full px-2.5 py-1 text-xs font-medium transition",
                   mode === m
-                    ? "bg-accent text-void"
+                    ? "bg-accent text-white"
                     : "bg-subtle text-text-secondary hover:text-text"
                 )}
               >
@@ -440,11 +440,6 @@ function ChatInput({ value, onChange, onSend, onStop, streaming, inputRef, mode,
           </div>
 
           <div className="flex items-end gap-2 p-3">
-            {/* Attach button */}
-            <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-subtle hover:text-text transition">
-              <ImageIcon size={20} />
-            </button>
-
             {/* Text input */}
             <textarea
               ref={inputRef}
@@ -475,9 +470,9 @@ function ChatInput({ value, onChange, onSend, onStop, streaming, inputRef, mode,
                 onClick={onSend}
                 disabled={!value.trim()}
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm transition",
                   value.trim()
-                    ? "bg-accent text-void hover:bg-accent-hover"
+                    ? "bg-accent text-white hover:bg-accent-hover shadow-accent-glow"
                     : "bg-subtle text-text-muted"
                 )}
               >
