@@ -17,6 +17,31 @@ export function useAuth() {
   // Load user from localStorage on mount
   useEffect(() => {
     try {
+      // 1. Check for OAuth bootstrap cookie first
+      if (typeof document !== "undefined") {
+        const bootstrapCookie = document.cookie
+          .split("; ")
+          .find((c) => c.startsWith("nexora_user_bootstrap="));
+        if (bootstrapCookie) {
+          try {
+            const val = decodeURIComponent(bootstrapCookie.split("=").slice(1).join("="));
+            const parsed = JSON.parse(val);
+            const user: AppUser = {
+              email: parsed.email,
+              name: parsed.name || parsed.email?.split("@")[0] || "",
+              isAdmin: !!parsed.isAdmin,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+            setUserState(user);
+            // Clear bootstrap cookie
+            document.cookie = "nexora_user_bootstrap=; path=/; max-age=0";
+            setLoading(false);
+            return;
+          } catch {}
+        }
+      }
+
+      // 2. Read from localStorage
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -33,7 +58,6 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     try {
-      // Clear server session
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {}
     localStorage.removeItem(STORAGE_KEY);
