@@ -270,7 +270,11 @@ export async function POST(req: Request) {
     }
   }
 
-  const baseSystem = `You are Nexora — an intelligent AI workspace. Date: ${now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. Year: ${year}. Answer in the user's language (Roman Urdu, Urdu, Hindi, English). Be thorough, accurate, and engaging.`;
+  const baseSystem = `You are Nexora, a highly capable AI assistant with broad expertise across science, technology, history, culture, geography, health, business, math, programming, and current events.
+
+Date: ${now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. Year: ${year}.
+
+Answer the user's question with detail, accuracy, and genuine usefulness. Give real facts, concrete examples, and clear reasoning. For code, write complete working examples. Answer in the user's language (Roman Urdu, Urdu, Hindi, English). Use Markdown (bold, bullets, code). Be honest when unsure. If web research is provided, use it for accuracy.`;
 
   // ─── STEP 1: ORCHESTRATOR — Classify the question ───
   const classification = classifyQuestion(lastUser);
@@ -289,14 +293,16 @@ export async function POST(req: Request) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          stream: true,
+          stream: false,
           messages: [{ role: "system", content: baseSystem }, ...b.messages],
           temperature: 0.7,
         }),
       });
-      if (res.ok && res.body) {
+      const d = await res.json().catch(() => ({}));
+      const text = d?.choices?.[0]?.message?.content;
+      if (res.ok && text) {
         if (authUser) logUsage({ userId: authUser.id, type: classification.type, mode, success: true }).catch(() => {});
-        return new Response(streamResponse(res), {
+        return new Response(text, {
           headers: { "Content-Type": "text/plain; charset=utf-8", "X-Orchestrator": classification.reasoning, ...corsHeaders },
         });
       }
@@ -305,8 +311,9 @@ export async function POST(req: Request) {
 
   // ─── STEP 3b: COMPLEX question → multi-agent consensus pipeline ───
 
-  // Launch web research + ALL selected agents IN PARALLEL
-  const researchPromise = classification.needsWebSearch ? webResearch(lastUser) : Promise.resolve("");
+  // Always run web research in the consensus path so the AI has current,
+  // accurate facts (free models have limited knowledge cutoffs).
+  const researchPromise = webResearch(lastUser);
 
   const agentPromises = selectedAgents.map((m) => callModel(m, baseSystem, b.messages, 10000));
 

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { StoreProvider } from "./lib/store";
 import { useAuth } from "./lib/useAuth";
-import { Navigation } from "./components/layout/Navigation";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";
 import { AuthScreen } from "./components/auth/AuthScreen";
@@ -66,21 +65,16 @@ function AppShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-void text-text">
-      {/* Navigation Rail */}
-      <Navigation
+      {/* Unified Sidebar: nav + conversations */}
+      <Sidebar
         view={view}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
         onViewChange={setView}
         isAdmin={user.isAdmin}
         theme={theme}
         onToggleTheme={toggleTheme}
         onLogout={logout}
-      />
-
-      {/* Sidebar */}
-      <Sidebar
-        view={view}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
 
       {/* Main Content */}
@@ -110,8 +104,10 @@ function AppShell() {
             onClick={() => setMobileNavOpen(false)}
           />
           <div className="absolute left-0 top-0 h-full w-72 bg-surface border-r border-border animate-slide-up">
-            <Navigation
+            <Sidebar
               view={view}
+              isOpen
+              onToggle={() => setMobileNavOpen(false)}
               onViewChange={(v) => {
                 setView(v);
                 setMobileNavOpen(false);
@@ -120,7 +116,6 @@ function AppShell() {
               theme={theme}
               onToggleTheme={toggleTheme}
               onLogout={logout}
-              expanded
             />
           </div>
         </div>
