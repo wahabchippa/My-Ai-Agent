@@ -5,13 +5,8 @@ import {
   ArrowUp,
   StopIcon,
   Paperclip,
-  SparkleIcon,
-  BoltIcon,
-  GlobeIcon,
-  CheckIcon,
   MicIcon,
 } from "./icons";
-import { transformText } from "../lib/brain";
 import { useSpeechToText } from "../lib/voice";
 import { cn } from "../utils/cn";
 
@@ -37,10 +32,8 @@ export function ChatInput({
   onWebChange?: (b: boolean) => void;
 }) {
   const [value, setValue] = useState("");
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string; content: string } | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const toolsRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { supported: micSupported, listening, start: startMic, stop: stopMic } =
@@ -86,17 +79,6 @@ export function ChatInput({
     ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
   }, [value]);
 
-  // close tools popover on outside click
-  useEffect(() => {
-    if (!toolsOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (toolsRef.current && !toolsRef.current.contains(e.target as Node))
-        setToolsOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [toolsOpen]);
-
   const submit = () => {
     let text = value.trim();
     if (!text || streaming) return;
@@ -119,20 +101,6 @@ export function ChatInput({
       submit();
     }
   };
-
-  const applyTool = (action: "polish" | "shorten" | "fix" | "expand") => {
-    if (!value.trim()) return;
-    setValue(transformText(value, action));
-    setToolsOpen(false);
-    requestAnimationFrame(() => taRef.current?.focus());
-  };
-
-  const toolActions = [
-    { label: "Polish", desc: "Clean spacing & grammar", fn: () => applyTool("polish") },
-    { label: "Shorten", desc: "Trim to the essentials", fn: () => applyTool("shorten") },
-    { label: "Expand", desc: "Add a clarifying line", fn: () => applyTool("expand") },
-    { label: "Fix", desc: "Auto-correct text", fn: () => applyTool("fix") },
-  ];
 
   return (
     <div
@@ -173,81 +141,6 @@ export function ChatInput({
 
       <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
         <div className="flex items-center gap-0.5">
-          <span className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-muted" title="All models answer together and combine into one best answer">
-            <span className="h-1.5 w-1.5 rounded-full bg-coral" />
-            Consensus
-          </span>
-
-          {/* Improve — polishes the current draft */}
-          <button
-            onClick={() => applyTool("polish")}
-            disabled={!value.trim()}
-            className={cn(
-              "hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition sm:flex",
-              value.trim()
-                ? "text-muted hover:bg-cream-deep hover:text-ink-soft dark:hover:bg-night-surface dark:hover:text-cream"
-                : "cursor-not-allowed text-muted-2/60"
-            )}
-            title="Improve this text"
-          >
-            <SparkleIcon size={15} />
-            Improve
-          </button>
-
-          {/* Tools — popover of quick text actions */}
-          <div className="relative hidden sm:block" ref={toolsRef}>
-            <button
-              onClick={() => setToolsOpen((o) => !o)}
-              disabled={!value.trim()}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition",
-                toolsOpen
-                  ? "bg-cream-deep text-ink-soft dark:bg-night-surface dark:text-cream"
-                  : value.trim()
-                  ? "text-muted hover:bg-cream-deep hover:text-ink-soft dark:hover:bg-night-surface dark:hover:text-cream"
-                  : "cursor-not-allowed text-muted-2/60"
-              )}
-              title="Text tools"
-            >
-              <BoltIcon size={15} />
-              Tools
-            </button>
-            {toolsOpen && (
-              <div className="animate-rise absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden rounded-2xl border border-line bg-cream p-1.5 shadow-[0_12px_44px_rgba(60,50,30,0.18)] dark:border-night-surface dark:bg-night">
-                {toolActions.map((a) => (
-                  <button
-                    key={a.label}
-                    onClick={a.fn}
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-cream-deep dark:hover:bg-night-surface"
-                  >
-                    <span>
-                      <span className="block text-[13px] font-medium text-ink dark:text-cream">
-                        {a.label}
-                      </span>
-                      <span className="block text-[11px] text-muted">{a.desc}</span>
-                    </span>
-                    <BoltIcon size={13} className="text-muted-2" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Web — toggle simulated search mode */}
-          <button
-            onClick={() => onWebChange?.(!web)}
-            className={cn(
-              "hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition sm:flex",
-              web
-                ? "bg-coral/15 text-coral"
-                : "text-muted hover:bg-cream-deep hover:text-ink-soft dark:hover:bg-night-surface dark:hover:text-cream"
-            )}
-            title="Toggle web search"
-          >
-            {web ? <CheckIcon size={14} /> : <GlobeIcon size={15} />}
-            Web
-          </button>
-
           <button
             onClick={() => fileRef.current?.click()}
             className={cn(
@@ -285,12 +178,6 @@ export function ChatInput({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span className="hidden pr-1 text-[11px] text-muted-2 sm:inline">
-            <kbd className="rounded border border-line px-1 dark:border-night-surface">
-              ↵
-            </kbd>{" "}
-            to send
-          </span>
           {streaming ? (
             <button
               onClick={onStop}
