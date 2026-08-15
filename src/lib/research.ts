@@ -107,6 +107,80 @@ async function wiki(q: string): Promise<string> {
   }
 }
 
+/**
+ * Wikidata — STRUCTURED current-officeholder data.
+ *
+ * Ye add karne ki wajah: DuckDuckGo aur Wikipedia snippets "Prime Minister
+ * of Pakistan" jaise sawal pe office ki TAREEKH bata dete hain magar mojooda
+ * shakhs ka naam nahi. Live test me model ne is wajah se 2024 ka purana
+ * naam de diya tha. Wikidata claims (P35 head of state, P6 head of govt)
+ * hamesha current hote hain aur jinka "end time" ho unhe hum skip karte hain.
+ */
+async function wikidata(q: string): Promise<string> {
+  try {
+    // Sawal me se entity nikalo: "Pakistan ka current prime minister kaun hai"
+    // → "Pakistan". Stop-words hata kar sabse ahem noun rakhte hain.
+    const cleaned = q
+      .replace(
+        /\b(who|what|which|is|are|the|current|currently|now|of|in|ka|ki|ke|kaun|hai|hain|konsa|kya|present|today|list|prime|minister|president|ceo|leader|head)\b/gi,
+        " "
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+    const term = cleaned || q;
+    if (term.length < 2) return "";
+
+    const sr = await fetch(
+      `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(
+        term
+      )}&language=en&format=json&limit=1&origin=*`,
+      { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(6000) }
+    );
+    if (!sr.ok) return "";
+    const sd = await sr.json();
+    const id = sd?.search?.[0]?.id;
+    if (!id) return "";
+
+    const er = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${id}.json`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!er.ok) return "";
+    const ed = await er.json();
+    const ent = ed?.entities?.[id];
+    const claims = ent?.claims || {};
+    const label = ent?.labels?.en?.value || term;
+
+    const PROPS: Record<string, string> = {
+      P35: "head of state",
+      P6: "head of government",
+      P488: "chairperson",
+      P169: "CEO",
+    };
+
+    const lines: string[] = [];
+    for (const [prop, human] of Object.entries(PROPS)) {
+      for (const cl of claims[prop] || []) {
+        if (cl.rank === "deprecated") continue;
+        if (cl.qualifiers?.P582) continue; // end time = ab nahi rahe
+        const qid = cl.mainsnak?.datavalue?.value?.id;
+        if (!qid) continue;
+        const lr = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, {
+          headers: { "User-Agent": UA },
+          signal: AbortSignal.timeout(6000),
+        }).catch(() => null);
+        if (!lr?.ok) continue;
+        const ld = await lr.json().catch(() => null);
+        const name = ld?.entities?.[qid]?.labels?.en?.value;
+        if (name) lines.push(`${label} — current ${human}: ${name}`);
+      }
+    }
+    return lines.length ? `WIKIDATA (structured, current):\n${lines.join("\n")}` : "";
+  } catch {
+    return "";
+  }
+}
+
 function strip(s: string): string {
   return s
     .replace(/<[^>]+>/g, "")
@@ -146,13 +220,17 @@ export async function research(query: string): Promise<string> {
   const q = query.replace(/[?!]/g, "").trim().slice(0, 200);
   if (!q) return "";
 
-  const [a, b, c] = await Promise.all([
+  const [a, b, c, d] = await Promise.all([
     withTimeout(ddgHtml(q), 10000),
     withTimeout(ddg(q), 9000),
     withTimeout(wiki(q), 9000),
+    withTimeout(wikidata(q), 12000),
   ]);
 
   const parts: string[] = [];
+  // Wikidata sabse UPAR — ye structured aur hamesha current hota hai, to
+  // model isay sabse pehle parhta hai.
+  if (d) parts.push(d);
   if (a) parts.push(`SEARCH RESULTS:\n${a}`);
   if (b) parts.push(`QUICK FACTS:\n${b}`);
   if (c) parts.push(c);

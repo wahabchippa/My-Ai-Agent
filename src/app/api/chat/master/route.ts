@@ -109,19 +109,45 @@ function classify(question: string): Classification {
  * tha aur keyless models bhi usi list me the — to "fast" mode me top-1
  * aksar pollinations/llm7 ban jata tha. Ab fresh-first, stale-last.
  */
-function selectAgents(c: Classification, mode: Mode, pool: Entry[]): Entry[] {
-  const score = (e: Entry) => {
-    let s = e.rank;
-    if (e.tags.some((t) => c.tags.includes(t))) s -= 100;
-    if (isStale(e)) s += 1000;
-    if (!e.envKey) s += 2000;
-    return s;
-  };
-  const ranked = [...pool].sort((a, b) => score(a) - score(b));
+function scoreEntry(c: Classification, e: Entry): number {
+  let s = e.rank;
+  if (e.tags.some((t) => c.tags.includes(t))) s -= 100;
+  if (isStale(e)) s += 1000;
+  if (!e.envKey) s += 2000;
+  return s;
+}
 
-  if (mode === "fast") return ranked.slice(0, 2);      // 2 = ek fail ho to backup
-  if (mode === "balanced") return ranked.slice(0, c.needsConsensus ? 3 : 2);
-  return ranked.slice(0, 5);                            // deep
+/**
+ * PROVIDER DIVERSITY — ye ek asli bug ka fix hai.
+ *
+ * Live test me "balanced" mode ne top-2 models chune, aur DONO Gemini the
+ * (rank 1 aur 2). Gemini ka free tier 429 pe gaya to POORI request fail
+ * ho gayi — jabke Groq aur OpenRouter keys bilkul theek thin.
+ *
+ * Ab pehle har provider se uska BEHTAREEN model liya jata hai, phir agar
+ * jagah bache to baaki. Ek provider down ho to dusra sambhal leta hai.
+ */
+function diversify(ranked: Entry[], limit: number): Entry[] {
+  const seen = new Set<string>();
+  const out: Entry[] = [];
+  for (const e of ranked) {
+    if (out.length >= limit) break;
+    if (seen.has(e.provider)) continue;
+    seen.add(e.provider);
+    out.push(e);
+  }
+  for (const e of ranked) {
+    if (out.length >= limit) break;
+    if (!out.includes(e)) out.push(e);
+  }
+  return out;
+}
+
+function selectAgents(c: Classification, mode: Mode, pool: Entry[]): Entry[] {
+  const ranked = [...pool].sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b));
+  if (mode === "fast") return diversify(ranked, 2);
+  if (mode === "balanced") return diversify(ranked, c.needsConsensus ? 3 : 2);
+  return diversify(ranked, 5);
 }
 
 export async function POST(req: Request) {
@@ -222,7 +248,28 @@ export async function POST(req: Request) {
 
   // ─── STEP 4a: SINGLE-MODEL PATH ───
   if (!c.needsConsensus) {
-    const { result, attempts } = await raceModels(agents, system, messages, { timeoutMs: 25000 });
+    let { result, attempts } = await raceModels(agents, system, messages, {
+      timeoutMs: 25000,
+      useGrounding: c.needsWebSearch, // Gemini apna Google Search chalayega
+    });
+
+    // CASCADE — agar chune hue agents fail ho gaye (429/500/timeout), to
+    // baaki POOL bhi try karo. Pehle app yahin haar maan leti thi, chahe
+    // Groq/OpenRouter bilkul theek hon.
+    if (!result.ok) {
+      const rest = pool
+        .filter((e) => !agents.includes(e))
+        .sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b))
+        .slice(0, 6);
+      if (rest.length) {
+        const retry = await raceModels(rest, system, messages, {
+          timeoutMs: 25000,
+          useGrounding: c.needsWebSearch,
+        });
+        attempts = [...attempts, ...retry.attempts];
+        result = retry.result;
+      }
+    }
 
     if (result.ok) {
       if (authUser) logUsage({ userId: authUser.id, type: c.type, mode, success: true }).catch(() => {});
@@ -248,11 +295,27 @@ export async function POST(req: Request) {
 
   // ─── STEP 4b: CONSENSUS PATH ───
   const results = await Promise.all(
-    agents.map((a) => callModel(a, system, messages, { timeoutMs: 25000 }))
+    agents.map((a) => callModel(a, system, messages, { timeoutMs: 25000, useGrounding: c.needsWebSearch }))
   );
   const good = results.filter((r) => r.ok && r.text.trim().length > 40);
 
   if (!good.length) {
+    // CASCADE — consensus agents fail hue to baaki pool try karo.
+    const rest = pool
+      .filter((e) => !agents.includes(e))
+      .sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b))
+      .slice(0, 6);
+    if (rest.length) {
+      const retry = await raceModels(rest, system, messages, {
+        timeoutMs: 25000,
+        useGrounding: c.needsWebSearch,
+      });
+      if (retry.result.ok) {
+        return new Response(retry.result.text, {
+          headers: dbg({ "X-Nexora-Model": retry.result.model, "X-Nexora-Note": "cascade-recovery" }),
+        });
+      }
+    }
     const errs = results.map((r) => `• ${r.provider}: ${r.error}`).join("\n");
     return new Response(`Sabhi agents fail:\n\n${errs}`, { status: 502, headers: dbg() });
   }

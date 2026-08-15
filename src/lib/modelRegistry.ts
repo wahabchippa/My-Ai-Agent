@@ -49,31 +49,47 @@ export interface Entry {
 // TIER 1 — FRONTIER (free tier, key chahiye, 10 min me mil jati hai)
 // ─────────────────────────────────────────────────────────────────
 export const REGISTRY: Entry[] = [
-  // ── Google Gemini — BEST free tier. 1500 req/day. Grounding support. ──
+  // ── Google Gemini — BEST free tier. Live-verified 2026-08-16 ──
+  // Har entry asli key se test ki gayi; model ne khud apna cutoff bataya.
+  // ⚠ "gemini-3-flash" 404 deta hai — wo exist nahi karta. Sahi naam
+  //   "gemini-3-flash-preview" hai, magar 3.7 usse behtar hai.
   {
-    id: "gemini-3-flash",
-    name: "Gemini 3 Flash",
+    id: "gemini-37-flash",
+    name: "Gemini 3.7 Flash",
     provider: "Google",
     fmt: "gemini",
     url: "",
-    model: "gemini-3-flash",
+    model: "gemini-3.7-flash",
     envKey: "GEMINI_API_KEY",
     tags: ["reasoning", "knowledge", "coding", "math", "creative", "general", "fast"],
     rank: 1,
-    cutoff: "2025",
+    cutoff: "2026-03", // ← model ne khud bataya: "knowledge cutoff is March 2026"
     grounded: true,
   },
   {
-    id: "gemini-25-flash",
-    name: "Gemini 2.5 Flash",
+    id: "gemini-36-flash",
+    name: "Gemini 3.6 Flash",
     provider: "Google",
     fmt: "gemini",
     url: "",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.6-flash",
     envKey: "GEMINI_API_KEY",
     tags: ["reasoning", "knowledge", "coding", "math", "creative", "general", "fast"],
+    rank: 2,
+    cutoff: "2026-03",
+    grounded: true,
+  },
+  {
+    id: "gemini-35-flash",
+    name: "Gemini 3.5 Flash",
+    provider: "Google",
+    fmt: "gemini",
+    url: "",
+    model: "gemini-3.5-flash",
+    envKey: "GEMINI_API_KEY",
+    tags: ["reasoning", "knowledge", "coding", "general", "fast"],
     rank: 3,
-    cutoff: "2025",
+    cutoff: "2025-01",
     grounded: true,
   },
   {
@@ -85,12 +101,27 @@ export const REGISTRY: Entry[] = [
     model: "gemini-3.1-flash-lite",
     envKey: "GEMINI_API_KEY",
     tags: ["general", "fast", "knowledge"],
-    rank: 6,
-    cutoff: "2025",
+    rank: 10,
+    cutoff: "2025-01",
+    grounded: true,
+  },
+  // ⚠ gemini-2.5-flash ne khud kaha "as of early 2023" — bohot purana.
+  // Sirf aakhri Gemini fallback ke taur pe rakha hai.
+  {
+    id: "gemini-25-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "Google",
+    fmt: "gemini",
+    url: "",
+    model: "gemini-2.5-flash",
+    envKey: "GEMINI_API_KEY",
+    tags: ["general", "fast"],
+    rank: 30,
+    cutoff: "2024-06",
     grounded: true,
   },
 
-  // ── Cerebras — 1M tokens/day free, ~2600 tok/s (fastest). ──
+  // ── Cerebras — 1M tokens/day free (key optional) ──
   {
     id: "cerebras-gptoss120",
     name: "GPT-OSS 120B (Cerebras)",
@@ -100,7 +131,7 @@ export const REGISTRY: Entry[] = [
     model: "gpt-oss-120b",
     envKey: "CEREBRAS_API_KEY",
     tags: ["reasoning", "coding", "math", "knowledge", "general"],
-    rank: 4,
+    rank: 11,
     cutoff: "2024-06",
   },
   {
@@ -112,23 +143,11 @@ export const REGISTRY: Entry[] = [
     model: "qwen-3-235b-a22b-instruct-2507",
     envKey: "CEREBRAS_API_KEY",
     tags: ["reasoning", "coding", "knowledge", "general"],
-    rank: 5,
+    rank: 12,
     cutoff: "2024",
   },
 
-  // ── Groq — 14,400 req/day free, ultra fast LPU. ──
-  {
-    id: "groq-llama33",
-    name: "Llama 3.3 70B (Groq)",
-    provider: "Groq",
-    fmt: "openai",
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    model: "llama-3.3-70b-versatile",
-    envKey: "GROQ_API_KEY",
-    tags: ["reasoning", "coding", "knowledge", "math", "creative", "general"],
-    rank: 7,
-    cutoff: "2023-12",
-  },
+  // ── Groq — live-verified 2026-08-16 (15 models available on this key) ──
   {
     id: "groq-gptoss120",
     name: "GPT-OSS 120B (Groq)",
@@ -137,9 +156,49 @@ export const REGISTRY: Entry[] = [
     url: "https://api.groq.com/openai/v1/chat/completions",
     model: "openai/gpt-oss-120b",
     envKey: "GROQ_API_KEY",
-    tags: ["reasoning", "coding", "math", "knowledge"],
-    rank: 8,
+    tags: ["reasoning", "coding", "math", "knowledge", "general"],
+    rank: 13,
     cutoff: "2024-06",
+  },
+  {
+    id: "groq-qwen36",
+    name: "Qwen 3.6 27B (Groq)",
+    provider: "Groq",
+    fmt: "openai",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    model: "qwen/qwen3.6-27b",
+    envKey: "GROQ_API_KEY",
+    tags: ["reasoning", "coding", "general"],
+    rank: 14,
+    cutoff: "2025",
+  },
+  {
+    id: "groq-llama33",
+    name: "Llama 3.3 70B (Groq)",
+    provider: "Groq",
+    fmt: "openai",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    model: "llama-3.3-70b-versatile",
+    envKey: "GROQ_API_KEY",
+    tags: ["reasoning", "coding", "knowledge", "creative", "general"],
+    rank: 16,
+    cutoff: "2023-12",
+  },
+  {
+    id: "groq-compound",
+    name: "Groq Compound (web-enabled)",
+    provider: "Groq",
+    fmt: "openai",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    model: "groq/compound",
+    envKey: "GROQ_API_KEY",
+    tags: ["knowledge", "general", "reasoning"],
+    rank: 15,
+    // Base weights Dec 2023 ke hain, MAGAR compound ke paas built-in web
+    // search hai — is liye live sawalon pe ye fresh jawab deta hai.
+    // grounded:true isi liye hai; cutoff sach likha hai.
+    cutoff: "2023-12",
+    grounded: true, // Groq compound ke paas built-in web search hai
   },
   {
     id: "groq-llama31-8b",
@@ -150,7 +209,7 @@ export const REGISTRY: Entry[] = [
     model: "llama-3.1-8b-instant",
     envKey: "GROQ_API_KEY",
     tags: ["fast", "general"],
-    rank: 20,
+    rank: 40,
     cutoff: "2023-12",
   },
 
@@ -164,8 +223,11 @@ export const REGISTRY: Entry[] = [
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["reasoning", "knowledge", "general", "math"],
-    rank: 9,
-    cutoff: "2025",
+    rank: 20,
+    // ⚠ Live probe: model ne khud "October 2024" bataya (ek aur run me
+    // "October 2023"). Dono soorat me STALE — OpenRouter ki listing naya
+    // lagti hai magar weights purane hain.
+    cutoff: "2024-10",
   },
   {
     id: "or-nemotron-lightning",
@@ -176,8 +238,8 @@ export const REGISTRY: Entry[] = [
     model: "nvidia/nemotron-3.5-lightning:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["fast", "general", "knowledge"],
-    rank: 12,
-    cutoff: "2025",
+    rank: 21,
+    cutoff: "2024-06", // live probe
   },
   {
     id: "or-nemotron-super",
@@ -188,8 +250,8 @@ export const REGISTRY: Entry[] = [
     model: "nvidia/nemotron-3-super-120b-a12b:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["reasoning", "knowledge", "general"],
-    rank: 13,
-    cutoff: "2025",
+    rank: 22,
+    cutoff: "2024-09", // live probe
   },
   {
     id: "or-gemma4-31b",
@@ -200,8 +262,8 @@ export const REGISTRY: Entry[] = [
     model: "google/gemma-4-31b-it:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["knowledge", "general", "creative"],
-    rank: 15,
-    cutoff: "2024",
+    rank: 17,
+    cutoff: "2025-01", // live probe — FRESH
   },
   {
     id: "or-gemma4-26b",
@@ -224,8 +286,8 @@ export const REGISTRY: Entry[] = [
     model: "cohere/north-mini-code:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["coding"],
-    rank: 17,
-    cutoff: "2025",
+    rank: 24,
+    cutoff: "2024-06", // live probe (aur 11s slow tha)
   },
   {
     id: "or-laguna",
@@ -237,7 +299,7 @@ export const REGISTRY: Entry[] = [
     envKey: "OPENROUTER_API_KEY",
     tags: ["coding", "reasoning"],
     rank: 18,
-    cutoff: "2025",
+    cutoff: "2025-11", // live probe — OpenRouter ka sabse fresh free model
   },
   {
     id: "or-gptoss20",
@@ -248,7 +310,8 @@ export const REGISTRY: Entry[] = [
     model: "openai/gpt-oss-20b:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["reasoning", "coding", "fast"],
-    rank: 19,
+    // Live probe: 20s timeout pe "Empty response" — reliably slow/broken.
+    rank: 45,
     cutoff: "2024-06",
   },
   {
@@ -260,8 +323,8 @@ export const REGISTRY: Entry[] = [
     model: "dots-studio/dots-3-note-preview:free",
     envKey: "OPENROUTER_API_KEY",
     tags: ["general", "creative"],
-    rank: 22,
-    cutoff: "2025",
+    rank: 19,
+    cutoff: "2025-12", // live probe — FRESH, 512K context
   },
   {
     id: "or-auto",
@@ -272,7 +335,52 @@ export const REGISTRY: Entry[] = [
     model: "openrouter/auto",
     envKey: "OPENROUTER_API_KEY",
     tags: ["general"],
-    rank: 25,
+    rank: 26,
+    cutoff: "2024-04", // live probe
+  },
+
+  // ── AirForce — is key par sirf Mistral free hai ──
+  // Live test: gemini-3.6-flash aur grok-* "requires active subscription".
+  // gemma-4-26b rate-limited (1 req). Sirf mistral-large chala.
+  {
+    id: "af-mistral",
+    name: "Mistral Large (AirForce)",
+    provider: "AirForce",
+    fmt: "openai",
+    url: "https://api.airforce/v1/chat/completions",
+    model: "mistral-large-latest",
+    envKey: "AIRFORCE_API_KEY",
+    tags: ["general", "creative"],
+    rank: 60,
+    // ⚠ Live probe: is model ne "September 2021" bataya — bohot purana.
+    cutoff: "2021-09",
+  },
+
+  // ── BazaarLink — ⚠ is key par credits KHATAM hain ──
+  // Live test: har model "Insufficient credits. Please top up".
+  // Entry rakhi hai taake top-up karte hi kaam kare, magar rank neeche.
+  {
+    id: "bl-glm52",
+    name: "GLM 5.2 (BazaarLink)",
+    provider: "BazaarLink",
+    fmt: "openai",
+    url: "https://api.bazaarlink.ai/v1/chat/completions",
+    model: "glm-5.2",
+    envKey: "BAZAARLINK_API_KEY",
+    tags: ["reasoning", "knowledge", "coding", "general"],
+    rank: 55,
+    cutoff: "2025",
+  },
+  {
+    id: "bl-gemini31pro",
+    name: "Gemini 3.1 Pro (BazaarLink)",
+    provider: "BazaarLink",
+    fmt: "openai",
+    url: "https://api.bazaarlink.ai/v1/chat/completions",
+    model: "gemini-3.1-pro-preview",
+    envKey: "BAZAARLINK_API_KEY",
+    tags: ["reasoning", "knowledge", "coding", "math", "general"],
+    rank: 56,
     cutoff: "2025",
   },
 

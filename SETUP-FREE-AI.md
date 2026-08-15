@@ -92,6 +92,53 @@ Sirf `CURRENT DATE: ...` likhna kaafi nahi. 2023 ka model date maan leta hai mag
 
 ---
 
+## 🔬 Aapki keys ka live test result (16 Aug 2026)
+
+Aapne jo 5 keys di thin, maine har ek ko asli call kar ke test kiya:
+
+| Provider | Status | Kya mila |
+|---|---|---|
+| **Gemini** | ✅ **KAAM KAR RAHI** | `gemini-3.7-flash` — cutoff **March 2026** (sabse fresh) |
+| **Groq** | ✅ **KAAM KAR RAHI** | 15 models — `qwen3.6-27b`, `gpt-oss-120b`, `groq/compound` (web-enabled) |
+| **OpenRouter** | ✅ **KAAM KAR RAHI** | Free models chal rahe — `laguna-s-2.1` (Nov 2025), `dots-3-note` (Dec 2025) |
+| **BazaarLink** | ❌ **CREDITS KHATAM** | Har model: *"Insufficient credits. Please top up"* |
+| **AirForce** | ⚠️ **MAHDOOD** | Sirf `mistral-large` chala — magar uska cutoff **Sept 2021** hai (bohot purana). Gemini/Grok "subscription required" |
+
+**Aap ke paas 3 acche providers hain — kaafi se zyada.** BazaarLink/AirForce ki zaroorat nahi.
+
+### Gemini par ek zaroori baat
+
+Aapki Gemini key par **ye models available hain** (maine list live nikali):
+
+```
+gemini-3.7-flash        ← cutoff March 2026  ⭐ ab default hai
+gemini-3.6-flash        ← cutoff March 2026
+gemini-3.5-flash        ← cutoff Jan 2025
+gemini-3.1-flash-lite   ← cutoff Jan 2025
+gemini-2.5-flash        ← "early 2023" 😬 (isay neeche kar diya)
+```
+
+⚠️ Purana code **`gemini-2.5-flash` ko hardcode** karta tha — aur wo model khud kehta hai uska knowledge *"early 2023"* ka hai. **Yehi aapke purane jawabon ki ek badi wajah thi.** Ab `gemini-3.7-flash` default hai.
+
+⚠️ `gemini-3-flash` naam ka koi model **exist nahi karta** (404). Sahi naam `gemini-3-flash-preview` hai.
+
+### Free tier limit ka dhyaan rakhein
+
+Testing ke dauran Gemini **429 (rate limit)** de gaya — free tier par ~10-15 requests/minute hai. Isi liye maine **cascade** add kiya: Gemini busy ho to app khud Groq → OpenRouter par chali jati hai. Aapko error nahi dikhega.
+
+---
+
+## ✅ Live proof — pehle vs ab
+
+| Sawal | **Pehle** | **Ab** |
+|---|---|---|
+| "Who is the current US president?" | Joe Biden ❌ | **Donald Trump, 47th, since Jan 20 2025** ✅ |
+| "Pakistan ka current PM kaun hai?" | Anwaar-ul-Haq Kakar ❌ | **Shehbaz Sharif** ✅ |
+| "Aaj konsa saal hai? 1990 wale ki umar?" | 2024 / 34 ❌ | **2026 / 36 saal** ✅ |
+| Groq reasoning model | `<think>Thinking Process: 1...` ❌ | saaf jawab ✅ |
+
+---
+
 ## 🔑 Free providers — konsa lein
 
 Sabse acha combo: **Gemini + Groq**. Dono free, dono 5 minute mein.

@@ -128,7 +128,7 @@ export async function callModel(
   entry: Entry,
   system: string,
   messages: Msg[],
-  opts: { timeoutMs?: number; temperature?: number } = {}
+  opts: { timeoutMs?: number; temperature?: number; useGrounding?: boolean } = {}
 ): Promise<CallResult> {
   const { timeoutMs = 30000, temperature = 0.7 } = opts;
   const t0 = Date.now();
@@ -149,19 +149,28 @@ export async function callModel(
       const url =
         `https://generativelanguage.googleapis.com/v1beta/models/${entry.model}` +
         `:generateContent?key=${encodeURIComponent(key)}`;
+
+      // GROUNDING — yehi "purane jawab" ka asal ilaj hai.
+      // Gemini apna Google Search khud chala kar LIVE facts le aata hai,
+      // to training cutoff ka masla hi khatam ho jata hai.
+      const body: Record<string, unknown> = {
+        systemInstruction: { parts: [{ text: system }] },
+        contents: messages
+          .filter((m) => m.content?.trim())
+          .map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
+        generationConfig: { temperature, maxOutputTokens: 8192 },
+      };
+      if (entry.grounded && opts.useGrounding) {
+        body.tools = [{ google_search: {} }];
+      }
+
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: messages
-            .filter((m) => m.content?.trim())
-            .map((m) => ({
-              role: m.role === "assistant" ? "model" : "user",
-              parts: [{ text: m.content }],
-            })),
-          generationConfig: { temperature, maxOutputTokens: 8192 },
-        }),
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       const d = await r.json().catch(() => ({}));
@@ -200,7 +209,8 @@ export async function callModel(
       const m = d?.error?.message || d?.error || d?.message;
       return { ...base, ok: false, text: "", error: explain(r.status, m, entry), ms: Date.now() - t0 };
     }
-    const text = d?.choices?.[0]?.message?.content ?? "";
+    const raw = d?.choices?.[0]?.message?.content ?? "";
+    const text = stripThinking(raw);
     if (!text.trim()) {
       return { ...base, ok: false, text: "", error: "Empty response", ms: Date.now() - t0 };
     }
@@ -218,6 +228,30 @@ export async function callModel(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Reasoning models (Groq qwen3.6, DeepSeek R1, Nemotron reasoning) apna
+ * internal "soch" <think>...</think> me bhejte hain. Purana code use
+ * seedha user ko dikha deta tha — jawab ganda aur confusing lagta tha.
+ * Live proof: groq qwen/qwen3.6-27b ne "<think>Thinking Process: 1. Analyze
+ * the Request..." return kiya tha.
+ */
+function stripThinking(t: string): string {
+  let out = t
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    .replace(/^[\s\S]*?<\/think>/i, "")
+    .replace(/^[\s\S]*?<\/thinking>/i, "")
+    .trim();
+
+  // Kabhi model <think> khol ke token limit hit kar deta hai aur closing
+  // tag aata hi nahi — us soorat me sab kuch "soch" hai. Live probe me
+  // groq qwen3.6-27b ne bilkul yehi kiya tha.
+  if (/^<think(ing)?>/i.test(out)) {
+    out = out.replace(/^<think(ing)?>/i, "").trim();
+  }
+  return out;
 }
 
 /** HTTP status → insani samajh wali wajah. */
@@ -254,9 +288,9 @@ export async function raceModels(
   entries: Entry[],
   system: string,
   messages: Msg[],
-  opts: { timeoutMs?: number; minLength?: number } = {}
+  opts: { timeoutMs?: number; minLength?: number; useGrounding?: boolean } = {}
 ): Promise<{ result: CallResult; attempts: CallResult[] }> {
-  const { timeoutMs = 30000, minLength = 40 } = opts;
+  const { timeoutMs = 30000, minLength = 40, useGrounding = false } = opts;
   const attempts: CallResult[] = [];
 
   const good = (r: CallResult) =>
@@ -271,7 +305,7 @@ export async function raceModels(
   for (const group of [fresh, rest]) {
     if (!group.length) continue;
     const results = await Promise.all(
-      group.map((e) => callModel(e, system, messages, { timeoutMs }))
+      group.map((e) => callModel(e, system, messages, { timeoutMs, useGrounding }))
     );
     attempts.push(...results);
     const winner = results.find(good) || results.find((r) => r.ok && r.text.trim());
