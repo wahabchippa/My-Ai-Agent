@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Claude warm cream backgrounds */
+  --color-cream: #faf9f5;
+  --color-cream-surface: #f0eee6;
+  --color-cream-deep: #ece9df;
+
+  /* Claude coral / clay accent */
+  --color-coral: #d97757;
+  --color-coral-hover: #c15f3f;
+  --color-coral-soft: #f3e7df;
+
+  /* Inks & neutrals */
+  --color-ink: #1f1e1d;
+  --color-ink-soft: #3d3a33;
+  --color-muted: #87867e;
+  --color-muted-2: #a8a69d;
+  --color-line: #e5e3da;
+
+  /* Dark theme */
+  --color-night: #262624;
+  --color-night-surface: #30302e;
+  --color-night-deep: #1d1d1b;
+
+  --font-serif: "Georgia", "Cambria", "Times New Roman", serif;
+  --font-sans: "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+    Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle, refined scrollbars like Claude */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted-2) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-muted-2);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-muted);
+}
+
+/* Typing caret used in the streaming answer */
+.caret-blink::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--color-coral);
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* Fade + rise used for messages, dropdowns, panels */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: riseIn 0.32s cubic-bezier(0.21, 0.61, 0.35, 1) both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade {
+  animation: fadeIn 0.2s ease both;
+}
+
+/* The three-dot "thinking" loader */
+@keyframes bounceDot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+.dot {
+  animation: bounceDot 1.2s infinite ease-in-out;
+}
+
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin-slow {
+  animation: spinSlow 1.4s linear infinite;
+}
+
+/* Claude's soft radial glow behind the welcome logo */
+.claude-glow {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(217, 119, 87, 0.16),
+    rgba(217, 119, 87, 0) 68%
+  );
+}
+
+/* Terminal scanline shimmer for Claude Code */
+.scanline {
+  background-image: linear-gradient(
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(0, 0, 0, 0.02) 50%
+  );
+  background-size: 100% 3px;
+}
