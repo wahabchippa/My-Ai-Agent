@@ -51,6 +51,7 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name, email, password }),
       });
 
@@ -62,7 +63,8 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
         return;
       }
 
-      setSuccess(true);
+      // Signup auto-logs in via server cookie — reload to enter the app
+      window.location.reload();
     } catch (err) {
       setError("Network error. Please try again.");
       setLoading(false);

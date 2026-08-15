@@ -152,8 +152,8 @@ export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileN
           </div>
           <div className="hidden sm:block">
             <div className="text-sm font-medium text-text">{user.name}</div>
-            <div className="text-[11px] text-text-muted">
-              {user.isAdmin ? "Admin" : "Free Plan"}
+            <div className="text-[11px] text-text-muted capitalize">
+              {user.isAdmin ? "Admin" : `${user.plan} Plan`}
             </div>
           </div>
         </div>

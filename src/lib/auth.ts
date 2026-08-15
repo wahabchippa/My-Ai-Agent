@@ -230,19 +230,14 @@ export async function createUser(data: {
   const verifyToken = generateSecureToken();
   const verifyExpires = new Date(Date.now() + VERIFY_TOKEN_EXPIRY);
   
-  // Create user
+  // Create user — auto-activated (email verification is optional/future)
   const [newUser] = await db.insert(users).values({
     email,
     name: data.name.trim(),
     passwordHash,
-    status: "pending_verification",
-    emailVerified: false,
-    emailVerifyToken: hashToken(verifyToken),
-    emailVerifyExpires: verifyExpires,
+    status: "active",
+    emailVerified: true,
   }).returning();
-  
-  // TODO: Send verification email with verifyToken
-  console.log(`[AUTH] Verification token for ${email}: ${verifyToken}`);
   
   return {
     user: {

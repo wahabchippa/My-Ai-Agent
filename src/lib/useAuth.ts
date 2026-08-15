@@ -3,64 +3,87 @@
 import { useState, useEffect, useCallback } from "react";
 
 export interface AppUser {
+  id: number;
   email: string;
   name: string;
+  role: string;
+  plan: string;
   isAdmin: boolean;
+  avatarUrl?: string | null;
 }
 
-const STORAGE_KEY = "nexora_user";
+const CACHE_KEY = "nexora_user_cache";
 
+/**
+ * useAuth — validates the session against the server on every mount.
+ * localStorage is ONLY a cache for instant UI rendering; the server
+ * cookie is the real authentication proof.
+ */
 export function useAuth() {
   const [user, setUserState] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user from localStorage on mount
+  // On mount: show cached user instantly, then verify with server
   useEffect(() => {
-    try {
-      // 1. Check for OAuth bootstrap cookie first
-      if (typeof document !== "undefined") {
-        const bootstrapCookie = document.cookie
-          .split("; ")
-          .find((c) => c.startsWith("nexora_user_bootstrap="));
-        if (bootstrapCookie) {
-          try {
-            const val = decodeURIComponent(bootstrapCookie.split("=").slice(1).join("="));
-            const parsed = JSON.parse(val);
-            const user: AppUser = {
-              email: parsed.email,
-              name: parsed.name || parsed.email?.split("@")[0] || "",
-              isAdmin: !!parsed.isAdmin,
-            };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-            setUserState(user);
-            // Clear bootstrap cookie
-            document.cookie = "nexora_user_bootstrap=; path=/; max-age=0";
-            setLoading(false);
-            return;
-          } catch {}
-        }
-      }
+    let cancelled = false;
 
-      // 2. Read from localStorage
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setUserState(parsed);
+    // 1. Show cached user immediately (avoids flash)
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.email) setUserState(parsed);
       }
     } catch {}
-    setLoading(false);
+
+    // 2. Verify session with server (source of truth)
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            const u: AppUser = {
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.name || data.user.email.split("@")[0],
+              role: data.user.role,
+              plan: data.user.plan,
+              isAdmin: data.user.role === "admin" || data.user.role === "super_admin",
+              avatarUrl: data.user.avatarUrl || null,
+            };
+            localStorage.setItem(CACHE_KEY, JSON.stringify(u));
+            setUserState(u);
+          } else {
+            // Server says no session — clear everything
+            localStorage.removeItem(CACHE_KEY);
+            setUserState(null);
+          }
+        } else {
+          localStorage.removeItem(CACHE_KEY);
+          setUserState(null);
+        }
+      })
+      .catch(() => {
+        // Network error — keep cached user if any, don't log out
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
   const setUser = useCallback((u: AppUser) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    localStorage.setItem(CACHE_KEY, JSON.stringify(u));
     setUserState(u);
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } catch {}
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(CACHE_KEY);
     setUserState(null);
   }, []);
 
