@@ -26,41 +26,63 @@ interface Body {
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** Each tier races a set of free models in parallel; fastest valid answer wins. */
+/**
+ * Each tier races a set of models in parallel; fastest valid answer wins.
+ *
+ * ── REBUILT 2026-08-16 — dead IDs hata diye ──
+ * Purani list me ye sab 404 de rahe the (OpenRouter se retire ho chuke):
+ *   deepseek/deepseek-r1:free, deepseek/deepseek-chat-v3.1:free,
+ *   qwen/qwen3-coder:free, meta-llama/llama-3.3-70b-instruct:free,
+ *   google/gemma-3-12b-it:free, mistralai/mistral-7b-instruct:free,
+ *   openai/gpt-oss-120b:free, nvidia/nemotron-3-nano-omni-...:free
+ *
+ * Aur `llm7:` entries khatarnak thi — wo model naam kuch bhi accept kar
+ * leta hai magar serve GPT-4o (Oct 2023 cutoff) karta hai. Live test:
+ *   llm7 "gemini-3.1-flash-lite" → "I am GPT-4o, cutoff October 2023"
+ *   llm7 "minimax-m2.7"          → "current president is Joe Biden"
+ * Isi liye ye ab sirf AAKHIRI fallback hain, aur `keyed:` models pehle.
+ *
+ * `keyed:` prefix wale entries sirf tab race me aate hain jab unki key
+ * set ho — warna skip. Ye ordering hi asal fix hai: fresh models pehle.
+ */
 const ENSEMBLES: Record<string, string[]> = {
+  // ── Ultra: sabse taqatwar available models ──
   fable: [
+    "gemini:gemini-3-flash",
+    "cerebras:gpt-oss-120b",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "groq:openai/gpt-oss-120b",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "google/gemma-4-31b-it:free",
-    "llm7:codestral-latest",
-    "openrouter/free",
     "pollinations:openai",
   ],
+  // ── Pro ──
   opus: [
+    "gemini:gemini-3-flash",
+    "cerebras:qwen-3-235b-a22b-instruct-2507",
     "nvidia/nemotron-3-super-120b-a12b:free",
+    "groq:llama-3.3-70b-versatile",
     "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "poolside/laguna-xs-2.1:free",
-    "llm7:codestral-latest",
+    "poolside/laguna-s-2.1:free",
     "pollinations:openai",
   ],
+  // ── Core: rozmarra ka default ──
   sonnet: [
+    "gemini:gemini-2.5-flash",
+    "groq:llama-3.3-70b-versatile",
+    "cerebras:gpt-oss-120b",
     "google/gemma-4-31b-it:free",
     "openai/gpt-oss-20b:free",
     "cohere/north-mini-code:free",
-    "llm7:gemini-3.1-flash-lite",
-    "llm7:gpt-oss:20b",
-    "openrouter/free",
-    "pollinations:openai-fast",
+    "pollinations:openai",
   ],
+  // ── Flash: sabse tez ──
   haiku: [
+    "gemini:gemini-3.1-flash-lite",
+    "groq:llama-3.1-8b-instant",
     "nvidia/nemotron-3.5-lightning:free",
     "openai/gpt-oss-20b:free",
     "nvidia/nemotron-nano-9b-v2:free",
-    "liquid/lfm-2.5-2.6b:free",
-    "llm7:gemini-3.1-flash-lite",
-    "llm7:mistral-Nemo-Instruct-2407",
     "pollinations:openai-fast",
   ],
 };
@@ -218,7 +240,8 @@ async function callBazaarLink(
 }
 
 /** Cerebras — extremely fast (~2600 tok/s). Needs CEREBRAS_API_KEY + billing. */
-const CEREBRAS_MODELS = ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"];
+// Verified live 2026-08-16 — "gemma-4-31b" Cerebras pe maujood NAHI tha (404).
+const CEREBRAS_MODELS = ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"];
 async function callCerebras(
   key: string,
   model: string,
@@ -301,13 +324,17 @@ async function callPollinations(
 }
 
 /** Groq (very fast, generous free tier) — only added if GROQ_API_KEY is set. */
+/** Groq free-tier models — verified live 2026-08-16. */
 const GROQ_MODELS = [
   "llama-3.3-70b-versatile",
-  "deepseek-r1-distill-llama-70b",
-  "gemma2-9b-it",
+  "openai/gpt-oss-120b",
+  "llama-3.1-8b-instant",
 ];
-/** Google Gemini — only added if GEMINI_API_KEY is set. */
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+/**
+ * Google Gemini — sabse acha free tier (1,500 req/day).
+ * gemini-3-flash pehle: naya cutoff + built-in search grounding.
+ */
+const GEMINI_MODELS = ["gemini-3-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
 
 async function callGroq(
   key: string,
@@ -366,43 +393,93 @@ async function callGemini(
 }
 
 /**
- * Race every model in parallel. The first to return a valid answer wins (so it's
- * as fast as the fastest model). `pollinations:` models are keyless; OpenRouter
- * uses the OR key; Groq/Gemini are added automatically IF their env keys exist.
+ * Run the ensemble in QUALITY TIERS, not one blind race.
+ *
+ * ── PURANA BUG (aapke ghalat jawabon ki asal wajah) ──
+ * Purana code SAB models ek saath `Promise.any` me daal deta tha aur jo
+ * PEHLE jawab de wo jeet jata tha. Masla: keyless endpoints (pollinations,
+ * llm7) sabse TEZ hain — kyunki wo chhote purane models chalate hain.
+ * To har request me practically WAHI jeetta tha, chahe aapne Gemini aur
+ * Groq keys laga rakhi hon. Aapko frontier model kabhi milta hi nahi tha.
+ *
+ * Live proof (2026-08-16):
+ *   llm7 "gemini-3.1-flash-lite" → "I am GPT-4o, knowledge cutoff Oct 2023"
+ *   llm7 "minimax-m2.7"          → "current president is Joe Biden"
+ *
+ * ── AB ──
+ * Tier 1 = aapke asli keyed providers (Gemini/Groq/Cerebras/OpenRouter).
+ * Tier 2 = keyless fallback — sirf tab jab Tier 1 poora fail ho jaye.
+ * Tier 1 ke andar race hoti hai (tez), magar keyless usay hara nahi sakta.
  */
 async function callEnsemble(opts: {
   orKey: string;
   groqKey: string;
   gemKey: string;
+  cerKey?: string;
   models: string[];
   system: string;
   messages: Msg[];
 }): Promise<string> {
-  const { orKey, groqKey, gemKey, models, system, messages } = opts;
-  const tasks: Promise<string>[] = [];
+  const { orKey, groqKey, gemKey, cerKey = "", models, system, messages } = opts;
+
+  const primary: Promise<string>[] = [];
+  const fallback: Promise<string>[] = [];
+
   for (const m of models) {
-    tasks.push(
-      m.startsWith("pollinations:")
-        ? callPollinations(
-            m.slice("pollinations:".length) || "openai",
-            system,
-            messages
-          )
-        : m.startsWith("llm7:")
-        ? callLLM7(m.slice("llm7:".length), system, messages)
-        : callOpenRouter(orKey, m, system, messages)
-    );
+    // Keyless — hamesha fallback tier me.
+    if (m.startsWith("pollinations:")) {
+      fallback.push(callPollinations(m.slice("pollinations:".length) || "openai", system, messages));
+      continue;
+    }
+    if (m.startsWith("llm7:")) {
+      fallback.push(callLLM7(m.slice("llm7:".length), system, messages));
+      continue;
+    }
+    // Explicit keyed prefixes — sirf tab jab key maujood ho.
+    if (m.startsWith("gemini:")) {
+      if (gemKey) primary.push(callGemini(gemKey, m.slice("gemini:".length), system, messages));
+      continue;
+    }
+    if (m.startsWith("groq:")) {
+      if (groqKey) primary.push(callGroq(groqKey, m.slice("groq:".length), system, messages));
+      continue;
+    }
+    if (m.startsWith("cerebras:")) {
+      if (cerKey) primary.push(callCerebras(cerKey, m.slice("cerebras:".length), system, messages));
+      continue;
+    }
+    // Baaki sab OpenRouter IDs — key chahiye.
+    if (orKey) primary.push(callOpenRouter(orKey, m, system, messages));
   }
-  if (groqKey)
-    for (const g of GROQ_MODELS) tasks.push(callGroq(groqKey, g, system, messages));
-  if (gemKey)
-    for (const g of GEMINI_MODELS)
-      tasks.push(callGemini(gemKey, g, system, messages));
-  try {
-    return await Promise.any(tasks);
-  } catch {
-    throw new Error("All models are busy/rate-limited right now. Please try again.");
+
+  // Tier 1: asli providers.
+  if (primary.length) {
+    try {
+      return await Promise.any(primary);
+    } catch {
+      // sab fail — Tier 2 pe jao
+    }
   }
+
+  // Tier 2: keyless emergency.
+  if (fallback.length) {
+    try {
+      const text = await Promise.any(fallback);
+      const warn =
+        "\n\n---\n*⚠️ Ye jawab ek purane fallback model se aaya hai (knowledge cutoff ~2023-2024), " +
+        "kyunki koi configured provider jawab nahi de saka. Behtar jawab ke liye " +
+        "`GEMINI_API_KEY` / `GROQ_API_KEY` set karein — SETUP-FREE-AI.md dekhein.*";
+      return text + warn;
+    } catch {
+      // dono tier fail
+    }
+  }
+
+  throw new Error(
+    primary.length
+      ? "Sabhi models busy/rate-limited hain. Thodi der baad koshish karein."
+      : "Koi AI provider configured nahi hai. `.env` me GEMINI_API_KEY ya GROQ_API_KEY daalein — SETUP-FREE-AI.md dekhein."
+  );
 }
 
 /** Reject a promise after `ms` so slow/dead models don't hold up consensus. */
@@ -462,31 +539,55 @@ async function callConsensus(opts: {
 }): Promise<string> {
   const { orKey, cerKey, groqKey, gemKey, blKey, afKey, system, messages } = opts;
   const keys = { orKey, cerKey, groqKey, gemKey, blKey, afKey };
-  // Fast models — all start in parallel. FIRST non-empty answer wins instantly.
-  const models = [
-    "llm7:gemini-3.1-flash-lite",
-    "pollinations:openai-fast",
-    "google/gemma-4-31b-it:free",
-    "openai/gpt-oss-20b:free",
-  ];
-  if (cerKey) for (const c of CEREBRAS_MODELS) models.push(`cerebras:${c}`);
-  // Groq always active (fallback key)
-  if (groqKey) for (const g of ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "qwen/qwen3.6-27b"]) models.push(`groq:${g}`);
-  // AirForce — free models (Mistral Large, GPT-4o)
-  if (afKey) for (const am of ["mistral-large-latest", "gpt-4o-mini"]) models.push(`airforce:${am}`);
-  // OpenAPIs — FREE Claude + GPT (open beta)
-  for (const om of ["claude-sonnet-4-6", "gpt-5.4", "claude-haiku-4-5"]) models.push(`openapis:${om}`);
-  // BazaarLink free models (DeepSeek V4, Qwen 3.7, Auto)
-  if (blKey) for (const bm of ["deepseek/deepseek-v4-flash:free", "qwen/qwen3.7-flash:free", "auto:free"]) models.push(`bazaarlink:${bm}`);
-  if (gemKey) for (const g of GEMINI_MODELS) models.push(`gemini:${g}`);
 
-  // PURE RACE: every model starts at once; first valid answer returns immediately.
-  const tasks = models.map((m) => withTimeout(runOne(m, keys, system, messages), 5000));
+  // ── PURANA BUG ──
+  // Ye ek "PURE RACE" thi: sab models 5s timeout ke saath ek saath, aur jo
+  // pehle bole wo jeet gaya. Keyless endpoints (llm7, pollinations, openapis)
+  // list me SABSE UPAR the aur sabse tez hain — kyunki wo chhote purane
+  // models chalate hain. Nateeja: chahe aapki Gemini/Groq keys set hon,
+  // jawab practically HAMESHA 2023-cutoff wale model se aata tha.
+  //
+  // Plus 5s timeout bara zalim tha — Gemini/Groq ko sochne ka waqt hi nahi
+  // milta tha, wo har baar timeout ho jate the.
+  //
+  // ── AB: 2 TIERS ──
+  const primary: string[] = [];
+  const fallback: string[] = [];
+
+  // Tier 1 — asli providers, sirf jab key set ho.
+  if (gemKey) for (const g of GEMINI_MODELS) primary.push(`gemini:${g}`);
+  if (cerKey) for (const c of CEREBRAS_MODELS) primary.push(`cerebras:${c}`);
+  if (groqKey) for (const g of ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]) primary.push(`groq:${g}`);
+  if (orKey) for (const o of ["google/gemma-4-31b-it:free", "openai/gpt-oss-20b:free"]) primary.push(o);
+  if (afKey) for (const am of ["mistral-large-latest"]) primary.push(`airforce:${am}`);
+  if (blKey) for (const bm of ["deepseek-v4-flash", "glm-5.2"]) primary.push(`bazaarlink:${bm}`);
+
+  // Tier 2 — keyless emergency fallback (purane models, warning ke saath).
+  fallback.push("pollinations:openai", "pollinations:openai-fast", "llm7:gemini-3.1-flash-lite");
+
+  // Tier 1: 20s timeout (5s nahi) — acha model ko sochne do.
+  if (primary.length) {
+    try {
+      return (await Promise.any(primary.map((m) => withTimeout(runOne(m, keys, system, messages), 20000)))).trim();
+    } catch {
+      // sab fail → Tier 2
+    }
+  }
+
+  // Tier 2: keyless.
   try {
-    const result = await Promise.any(tasks);
-    return result.trim();
+    const text = await Promise.any(fallback.map((m) => withTimeout(runOne(m, keys, system, messages), 15000)));
+    return (
+      text.trim() +
+      "\n\n---\n*⚠️ Purane fallback model ka jawab (cutoff ~2023-2024). " +
+      "`GEMINI_API_KEY` ya `GROQ_API_KEY` set karein — dono free hain. SETUP-FREE-AI.md dekhein.*"
+    );
   } catch {
-    throw new Error("All models are busy right now. Please try again.");
+    throw new Error(
+      primary.length
+        ? "Sabhi models busy hain. Thodi der baad koshish karein."
+        : "Koi AI provider configured nahi. `.env` me GEMINI_API_KEY daalein — SETUP-FREE-AI.md dekhein."
+    );
   }
 }
 

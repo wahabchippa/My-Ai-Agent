@@ -1,12 +1,13 @@
 {
-  "name": "nextjs-postgresql-template",
+  "name": "nexora",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "node scripts/verify-models.mjs"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",

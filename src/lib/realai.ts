@@ -53,10 +53,11 @@ export const PROVIDERS: ProviderInfo[] = [
     endpoint: "https://api.groq.com/openai/v1/chat/completions",
     models: [
       "llama-3.3-70b-versatile",
-      "llama-3.1-8b-instant",
-      "deepseek-r1-distill-llama-70b",
+      "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "gemma2-9b-it",
+      "llama-3.1-8b-instant",
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "qwen/qwen3-32b",
     ],
     free: true,
     popular: true,
@@ -71,15 +72,12 @@ export const PROVIDERS: ProviderInfo[] = [
     format: "gemini",
     endpoint: "",
     models: [
+      // Free tier me sirf Flash/Flash-Lite hain — Pro April 2026 se paid-only.
+      "gemini-3-flash",
       "gemini-2.5-flash",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash-lite",
-      "gemini-3.1-pro-preview",
-      "gemini-3-flash-preview",
       "gemini-3.1-flash-lite",
-      "gemini-pro-latest",
+      "gemini-2.5-flash-lite",
       "gemini-flash-latest",
-      "gemma-4-31b-it",
     ],
     free: true,
     popular: true,
@@ -94,20 +92,24 @@ export const PROVIDERS: ProviderInfo[] = [
     format: "openai",
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     models: [
-      // Free models (IDs end with :free) — $0/token, just rate-limited.
+      // ── FREE (:free) — VERIFIED LIVE 2026-08-16 via /api/v1/models ──
+      // Purani list ke 6 IDs retire ho chuke the (404): llama-3.3-70b-instruct,
+      // deepseek-r1, deepseek-chat-v3.1, gemma-3-12b-it, qwen3-coder,
+      // mistral-7b-instruct. Har ek 404 deti thi → chup-chaap purane
+      // fallback pe chala jata tha → GHALAT JAWAB.
       "openrouter/auto",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "deepseek/deepseek-r1:free",
-      "deepseek/deepseek-chat-v3.1:free",
-      "google/gemma-3-12b-it:free",
-      "qwen/qwen3-coder:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "nvidia/nemotron-3.5-lightning:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
-      "mistralai/mistral-7b-instruct:free",
-      // Cheap paid models (use credits).
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "openai/gpt-oss-20b:free",
+      "cohere/north-mini-code:free",
+      "poolside/laguna-s-2.1:free",
+      "dots-studio/dots-3-note-preview:free",
+      // Cheap paid models (credits chahiye).
       "openai/gpt-4o-mini",
       "google/gemini-2.5-flash",
-      "anthropic/claude-3.5-sonnet",
-      "x-ai/grok-2",
     ],
     free: true,
     popular: true,
@@ -255,9 +257,17 @@ export interface FreeModel {
   source?: "openrouter" | "pollinations";
 }
 
+/**
+ * ⚠ ORDERING MATTERS — VERIFIED LIVE 2026-08-16.
+ *
+ * Pehle keyless (pollinations/llm7) list me SABSE UPAR the, is liye default
+ * select ho jate the. Ye asal me GPT-4o / GPT-4 serve karte hain jinka
+ * cutoff Oct 2023 / Sep 2021 hai — chahe naam "gemini-3.1" likha ho.
+ * Isi wajah se AI 2023-24 ke jawab de raha tha.
+ *
+ * Ab: asli free models pehle, keyless sabse AAKHIR me (clearly labelled).
+ */
 export const FREE_MODELS: FreeModel[] = [
-  { id: "pollinations:openai", name: "GPT-OSS · No-Key", vendor: "Pollinations", tag: "100% free — no key, no signup", accent: "#7BC74D", source: "pollinations" },
-  { id: "pollinations:openai-fast", name: "GPT-OSS Fast · No-Key", vendor: "Pollinations", tag: "Instant — no key needed", accent: "#7BC74D", source: "pollinations" },
   { id: "openrouter/free", name: "Auto (Best Free)", vendor: "OpenRouter", tag: "Picks the best available free model", accent: "#d97757", source: "openrouter" },
   { id: "nvidia/nemotron-3-ultra-550b-a55b:free", name: "Nemotron 3 Ultra", vendor: "NVIDIA", tag: "Most capable · 1M context", accent: "#76B900" },
   { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super", vendor: "NVIDIA", tag: "Strong reasoning · 120B", accent: "#76B900" },
@@ -265,6 +275,8 @@ export const FREE_MODELS: FreeModel[] = [
   { id: "google/gemma-4-26b-a4b-it:free", name: "Gemma 4 26B", vendor: "Google", tag: "Efficient MoE", accent: "#4285F4" },
   { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B", vendor: "OpenAI", tag: "Fast open reasoning", accent: "#10A37F" },
   { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nemotron Nano Omni 30B", vendor: "NVIDIA", tag: "Reasoning · multimodal", accent: "#76B900" },
+  { id: "poolside/laguna-s-2.1:free", name: "Laguna S 2.1", vendor: "Poolside", tag: "Agentic coding · 262K", accent: "#6366f1" },
+  { id: "dots-studio/dots-3-note-preview:free", name: "Dots 3 Note", vendor: "Dots", tag: "512K context", accent: "#f59e0b" },
   { id: "nvidia/nemotron-3-nano-30b-a3b:free", name: "Nemotron Nano 30B", vendor: "NVIDIA", tag: "Compact & quick", accent: "#76B900" },
   { id: "nvidia/nemotron-nano-9b-v2:free", name: "Nemotron Nano 9B", vendor: "NVIDIA", tag: "Very fast", accent: "#76B900" },
   { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B VL", vendor: "NVIDIA", tag: "Vision-capable", accent: "#76B900" },
@@ -272,6 +284,9 @@ export const FREE_MODELS: FreeModel[] = [
   { id: "cohere/north-mini-code:free", name: "North Mini Code", vendor: "Cohere", tag: "Coding-focused", accent: "#39594D" },
   { id: "poolside/laguna-xs-2.1:free", name: "Laguna XS 2.1", vendor: "Poolside", tag: "Agentic coding", accent: "#6366f1" },
   { id: "liquid/lfm-2.5-2.6b:free", name: "LFM 2.6B", vendor: "Liquid", tag: "Tiny & instant", accent: "#0891b2" },
+  // ── KEYLESS FALLBACK — sabse aakhir. Purane models, sirf emergency. ──
+  { id: "pollinations:openai", name: "Pollinations (fallback)", vendor: "Keyless", tag: "⚠ No key needed — purana model (~2024)", accent: "#8a8a8a", source: "pollinations" },
+  { id: "pollinations:openai-fast", name: "Pollinations Fast (fallback)", vendor: "Keyless", tag: "⚠ No key needed — purana model (~2024)", accent: "#8a8a8a", source: "pollinations" },
 ];
 
 export function getFreeModel(id: string | null): FreeModel | null {
@@ -380,25 +395,52 @@ export interface ApiMessage {
   content: string;
 }
 
+/**
+ * System prompt — TEMPORAL GROUNDING ke saath.
+ *
+ * Purana prompt sirf "CURRENT DATE: X" likhta tha. Ye kaafi NAHI hai:
+ * jis model ki training 2023 me khatam hui, wo date maan leta hai magar
+ * facts phir bhi 2023 ke deta hai ("current president = Biden").
+ * Ab usay saaf saaf mana kiya jata hai ke purane facts ko "current"
+ * keh ke pesh na kare.
+ */
 export function systemPrompt(personality: string): string {
   const now = new Date();
   const year = now.getUTCFullYear();
-  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-  return `You are Nexora, a highly capable, knowledgeable AI assistant with broad expertise across science, technology, history, culture, geography, health, business, math, programming, and current events.
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return `You are Nexora, a highly capable AI assistant.
 
-CURRENT DATE: ${dateStr}. Current year: ${year}.
+════════ TEMPORAL GROUNDING (CRITICAL) ════════
+TODAY'S REAL DATE: ${dateStr}
+CURRENT YEAR: ${year}
 
-HOW TO ANSWER WELL:
-- Be specific, detailed, and genuinely useful — give real facts, concrete examples, and clear reasoning, not vague platitudes.
-- If asked for an explanation, explain the concept clearly with real-world examples and context.
-- For questions with a definite answer, give it directly first, then add helpful detail.
-- For open-ended questions, give a structured, insightful answer covering the key points.
-- Answer in the user's language (Roman Urdu, Urdu, Hindi, English).
-- Use Markdown: **bold** for key points, bullets/lists, \`code\` for code, and tables where helpful.
-- Think step-by-step and show your reasoning for math/logic.
-- For code, write complete, correct, working examples with explanations.
-- Be honest: if you are not sure, say so and give the most likely/verified information. Never invent citations.
-- If web search results are provided, use them for accuracy and current facts.`;
+Your training data ends BEFORE today. Follow these rules exactly:
+
+1. NEVER present a fact from training as "current" — who holds an office,
+   prices, latest versions, rankings, champions, company leadership.
+2. For time-sensitive questions with no web research provided, say:
+   "My training may be out of date — as of my last update [X], though this
+   may have changed." Then answer, clearly labelled as possibly outdated.
+3. NEVER guess the current year, current officeholder, or latest version.
+   Confidently wrong is far worse than "I'm not certain."
+4. Web research, when provided, OVERRIDES your training data entirely.
+5. Compute ages/durations from ${year}, not from your training year.
+
+════════ HOW TO ANSWER ════════
+- Direct answer first, then detail.
+- Real facts, concrete examples, actual numbers — no vague filler.
+- Step-by-step reasoning for math and logic.
+- Complete runnable code with a short explanation.
+- Match the user's language (Roman Urdu, Urdu, Hindi, English).
+- Markdown: **bold**, bullets, tables, \`code\` blocks.
+- Honesty over confidence. Never invent citations, URLs, or statistics.
+${personality ? `\n════════ PERSONA ════════\n${personality}\n` : ""}`;
 }
 
 export interface Spec {
