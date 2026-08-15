@@ -10,6 +10,9 @@ import { AuthScreen } from "./components/auth/AuthScreen";
 import { ChatView } from "./components/ChatView";
 import { ModelsView } from "./components/ModelsView";
 import { StudioView } from "./components/StudioView";
+import { ProjectsView } from "./components/ProjectsView";
+import { WorkspaceView } from "./components/WorkspaceView";
+import { SettingsView } from "./components/SettingsView";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { cn } from "./utils/cn";
 
@@ -97,9 +100,9 @@ function AppShell() {
           {view === "models" && <ModelsView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "studio" && <StudioView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
-          {view === "projects" && <ComingSoon title="Projects" />}
-          {view === "workspace" && <ComingSoon title="Coding Workspace" />}
-          {view === "settings" && <ComingSoon title="Settings" />}
+          {view === "projects" && <ProjectsView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "workspace" && <WorkspaceView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "settings" && <SettingsView onOpenSidebar={() => setSidebarOpen(true)} />}
         </div>
       </main>
 
