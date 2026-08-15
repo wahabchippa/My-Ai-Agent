@@ -103,11 +103,19 @@ function pickModels(tags: string[], pool: Entry[], exclude: Entry[] = [], n = 1)
     if (e.tags.some((t) => tags.includes(t))) s -= 100;
     if (isStale(e)) s += 1000;
     if (e.degraded) s += 800; // live par toota hua (402 / khaali jawab)
+    // Keyless models shared/IP-based quota par chalte hain — kaam ke hain
+    // (Zen ka cutoff 2025 hai) magar apni key wale se kam bharosemand.
+    if (!e.envKey) s += 15;
     s += 40 * (usedProviders.get(e.provider) ?? 0); // har dohraav par thori aur saza
     return s;
   };
 
-  const candidates = pool.filter((e) => e.envKey && !usedIds.has(e.id));
+  // ⚠ `e.envKey` par filter mat karna! Keyless models ka envKey "" hai, to
+  // wo filter unhe poori tarah bahar kar deta tha — OpenCode Zen add karne
+  // ke baad bhi wo kisi test me chala hi nahi. `available()` pehle hi ye
+  // guarantee deta hai ke jo entries aayi hain un ki key set hai YA wo
+  // keyless hain.
+  const candidates = pool.filter((e) => !usedIds.has(e.id));
   const out: Entry[] = [];
   for (let i = 0; i < n && candidates.length; i++) {
     const best = candidates.reduce((a, b) => (score(b) < score(a) ? b : a));
@@ -166,7 +174,9 @@ async function runPipeline(
   const task = cleaned.messages[0].content;
 
   const pool = available();
-  if (!pool.some((e) => e.envKey)) {
+  // Keyless models (OpenCode Zen) bhi ginti me hain — bina kisi key ke bhi
+  // app kaam kar sakti hai, bas thori dheemi.
+  if (!pool.length) {
     return {
       type: "error",
       error: "no-provider-configured",
