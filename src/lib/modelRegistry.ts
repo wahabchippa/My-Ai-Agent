@@ -384,6 +384,87 @@ export const REGISTRY: Entry[] = [
     cutoff: "2025",
   },
 
+  // ═════════════════════════════════════════════════════════════
+  // OPTIONAL EXTRA PROVIDERS
+  //
+  // Ye cheahjs/free-llm-api-resources aur public-apis lists se aaye hain.
+  // Sab ke free tiers hain. Key set karo to khud-ba-khud pool me aa jate
+  // hain (envKey khali ho to skip ho jate hain) — koi code badalna nahi.
+  //
+  // Signup links SETUP-FREE-AI.md me hain.
+  // ═════════════════════════════════════════════════════════════
+
+  // Cloudflare Workers AI — 10,000 neurons/day free.
+  // ⚠ URL me account ID chahiye, is liye CF_ACCOUNT_ID bhi set karna hoga.
+  {
+    id: "cf-llama33",
+    name: "Llama 3.3 70B (Cloudflare)",
+    provider: "Cloudflare",
+    fmt: "openai",
+    url: `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID || ""}/ai/v1/chat/completions`,
+    model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    envKey: "CLOUDFLARE_API_KEY",
+    tags: ["general", "reasoning", "fast"],
+    rank: 23,
+    cutoff: "2023-12",
+  },
+
+  // Mistral La Plateforme — free tier (1 req/sec).
+  {
+    id: "mistral-large",
+    name: "Mistral Large",
+    provider: "Mistral",
+    fmt: "openai",
+    url: "https://api.mistral.ai/v1/chat/completions",
+    model: "mistral-large-latest",
+    envKey: "MISTRAL_API_KEY",
+    tags: ["reasoning", "coding", "general", "creative"],
+    rank: 25,
+    cutoff: "2024",
+  },
+
+  // Cohere — free trial key, 1,000 req/month.
+  {
+    id: "cohere-command-a",
+    name: "Command A (Cohere)",
+    provider: "Cohere",
+    fmt: "openai",
+    url: "https://api.cohere.ai/compatibility/v1/chat/completions",
+    model: "command-a-03-2025",
+    envKey: "COHERE_API_KEY",
+    tags: ["general", "knowledge", "reasoning"],
+    rank: 27,
+    cutoff: "2025-03",
+  },
+
+  // SambaNova — free tier, bohot tez.
+  {
+    id: "sambanova-llama",
+    name: "Llama 3.3 70B (SambaNova)",
+    provider: "SambaNova",
+    fmt: "openai",
+    url: "https://api.sambanova.ai/v1/chat/completions",
+    model: "Meta-Llama-3.3-70B-Instruct",
+    envKey: "SAMBANOVA_API_KEY",
+    tags: ["general", "reasoning", "fast"],
+    rank: 28,
+    cutoff: "2023-12",
+  },
+
+  // Scaleway Generative APIs — 1,000,000 free tokens.
+  {
+    id: "scaleway-llama",
+    name: "Llama 3.3 70B (Scaleway)",
+    provider: "Scaleway",
+    fmt: "openai",
+    url: "https://api.scaleway.ai/v1/chat/completions",
+    model: "llama-3.3-70b-instruct",
+    envKey: "SCALEWAY_API_KEY",
+    tags: ["general", "reasoning"],
+    rank: 29,
+    cutoff: "2023-12",
+  },
+
   // ─────────────────────────────────────────────────────────────
   // TIER 3 — KEYLESS EMERGENCY FALLBACK
   //
