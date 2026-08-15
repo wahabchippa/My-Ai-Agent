@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
-  AGENTS,
-  MASTER,
-  getAgent,
-  orchestrate,
-  type AgentId,
-  type Orchestration,
-  type Stage,
-} from "../lib/agents";
+  SPECIALISTS,
+  classifyTask,
+  selectTeam,
+  type SpecialistId,
+} from "../lib/agentPrompts";
 import { Markdown } from "../lib/markdown";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { newId } from "../lib/store";
@@ -16,7 +13,46 @@ import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Phase = "idle" | "planning" | "running" | "done";
+export const MASTER = {
+  name: "Atlas",
+  role: "Master Orchestrator",
+  emoji: "🧠",
+  color: "#D97757",
+};
+
+type Phase = "idle" | "planning" | "running" | "synthesizing" | "done";
+
+/** Ek agent ne jo kaam kiya (server se aata hai). */
+interface Stage {
+  id: SpecialistId;
+  name: string;
+  role: string;
+  emoji: string;
+  color: string;
+  model: string;
+  provider: string;
+  output: string;
+  ok: boolean;
+  error?: string;
+  ms: number;
+}
+
+interface TeamMember {
+  id: SpecialistId;
+  name: string;
+  role: string;
+  emoji: string;
+  color: string;
+}
+
+const PLAN_FOR: Record<string, string[]> = {
+  build: ["Requirements samjho", "Code likho", "Review karo", "Tests banao"],
+  review: ["Code parho", "Bugs & security check karo", "Tests tajweez karo"],
+  research: ["Web se live maloomat lo", "Sources ka tajziya karo", "Brief tayyar karo"],
+  write: ["Audience & tone tay karo", "Draft likho", "Polish karo"],
+  data: ["Data samjho", "Tajziya + numbers", "Natayij & sifarishat"],
+  general: ["Sawal samjho", "Maloomat jama karo", "Jawab tayyar karo"],
+};
 
 const EXAMPLES = [
   "Build a todo app and test it",
@@ -27,13 +63,21 @@ const EXAMPLES = [
 
 export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const [phase, setPhase] = useState<Phase>("idle");
-  const [orch, setOrch] = useState<Orchestration | null>(null);
+  const [subject, setSubject] = useState("");
+  const [kind, setKind] = useState<string>("general");
+  const [plan, setPlan] = useState<string[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [log, setLog] = useState<Stage[]>([]);
-  const [current, setCurrent] = useState<AgentId | null>(null);
-  const [done, setDone] = useState<Set<AgentId>>(new Set());
+  const [current, setCurrent] = useState<SpecialistId | null>(null);
+  const [currentModel, setCurrentModel] = useState("");
+  const [done, setDone] = useState<Set<SpecialistId>>(new Set());
   const [finalShown, setFinalShown] = useState("");
+  const [synthBy, setSynthBy] = useState("");
+  const [researchChars, setResearchChars] = useState(0);
+  const [redacted, setRedacted] = useState<string[] | null>(null);
+  const [errMsg, setErrMsg] = useState("");
   const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const cancelRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,71 +85,177 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [log, current, finalShown]);
 
+  // Jab component band ho to chalti hui request bhi cancel karo.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  /** Final markdown me sab se bara code block dhoond kar artifact banao. */
+  const extractArtifact = (md: string): Artifact | null => {
+    const blocks = [...md.matchAll(/```(\w+)?\n([\s\S]*?)```/g)];
+    if (!blocks.length) return null;
+    const best = blocks.reduce((a, b) => (b[2].length > a[2].length ? b : a));
+    if (best[2].trim().length < 200) return null;
+    const lang = (best[1] || "text").toLowerCase();
+    return {
+      id: newId(),
+      title: lang === "html" ? "Live preview" : `main.${lang}`,
+      lang,
+      code: best[2].trim(),
+    };
+  };
+
   const run = async (taskText: string) => {
     const text = taskText.trim();
     if (!text) return;
-    cancelRef.current = false;
-    const o = orchestrate(text);
-    setOrch(o);
+
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    // Server bhi khud classify karta hai, magar UI ko turant plan dikhana hai
+    // (warna pehle response tak screen khaali rehti hai). Server ka faisla
+    // aate hi ye overwrite ho jata hai.
+    const guess = classifyTask(text);
+    setSubject(text);
+    setKind(guess);
+    setPlan(PLAN_FOR[guess] ?? PLAN_FOR.general);
+    setTeam(
+      selectTeam(guess)
+        .map((id) => SPECIALISTS.find((s) => s.id === id)!)
+        .filter(Boolean)
+        .map((s) => ({ id: s.id, name: s.name, role: s.role, emoji: s.emoji, color: s.color }))
+    );
     setLog([]);
     setDone(new Set());
     setCurrent(null);
+    setCurrentModel("");
     setFinalShown("");
+    setSynthBy("");
+    setResearchChars(0);
+    setRedacted(null);
+    setErrMsg("");
     setArtifact(null);
     setPhase("planning");
-    await delay(950);
-    if (cancelRef.current) {
+
+    try {
+      const res = await fetch("/api/agents?stream=1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: text }),
+        signal: ac.signal,
+      });
+
+      if (!res.ok && !res.body) {
+        const j = await res.json().catch(() => null);
+        setErrMsg(j?.message || `Server error ${res.status}`);
+        setPhase("done");
+        return;
+      }
+
+      // NDJSON stream — har line ek event.
+      const reader = res.body!.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+
+      for (;;) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+        buf += dec.decode(value, { stream: true });
+
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: Record<string, unknown>;
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          switch (ev.type) {
+            case "plan": {
+              const t = ev.team as TeamMember[];
+              setKind(ev.kind as string);
+              setPlan(PLAN_FOR[ev.kind as string] ?? PLAN_FOR.general);
+              setTeam(t);
+              setRedacted((ev.redacted as string[] | null) ?? null);
+              setPhase("running");
+              break;
+            }
+            case "research":
+              setResearchChars(ev.chars as number);
+              break;
+            case "agent:start":
+              setCurrent(ev.id as SpecialistId);
+              setCurrentModel(ev.model as string);
+              break;
+            case "agent:done": {
+              const st = ev.stage as Stage;
+              setLog((prev) => [...prev, st]);
+              setDone((prev) => new Set(prev).add(st.id));
+              setCurrent(null);
+              break;
+            }
+            case "synthesis:start":
+              setPhase("synthesizing");
+              break;
+            case "done": {
+              const md = ev.final as string;
+              setSynthBy(ev.synthesizedBy as string);
+              setArtifact(extractArtifact(md));
+              // Halka sa stream taake jawab "aata hua" mehsoos ho.
+              const tokens = md.match(/\s+|\S+/g) ?? [md];
+              const chunk = Math.max(1, Math.ceil(tokens.length / 50));
+              let acc = "";
+              for (let i = 0; i < tokens.length; i += chunk) {
+                if (ac.signal.aborted) break;
+                acc += tokens.slice(i, i + chunk).join("");
+                setFinalShown(acc);
+                await delay(14);
+              }
+              setFinalShown(md);
+              setPhase("done");
+              break;
+            }
+            case "error":
+              setErrMsg(ev.message as string);
+              setPhase("done");
+              break;
+          }
+        }
+      }
+      setPhase((p) => (p === "done" ? p : "done"));
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        setErrMsg(e instanceof Error ? e.message : "Network error");
+      }
       setPhase("done");
-      return;
-    }
-    setPhase("running");
-    for (const stage of o.stages) {
-      if (cancelRef.current) break;
-      setCurrent(stage.agentId);
-      await delay(stage.ms);
-      if (cancelRef.current) break;
-      setLog((prev) => [...prev, stage]);
-      setDone((prev) => new Set(prev).add(stage.agentId));
+    } finally {
       setCurrent(null);
-      await delay(180);
     }
-    if (cancelRef.current) {
-      setPhase("done");
-      return;
-    }
-    // stream the final deliverable
-    const tokens = o.final.match(/\s+|\S+/g) ?? [o.final];
-    const chunk = Math.max(1, Math.ceil(tokens.length / 60));
-    let acc = "";
-    for (let i = 0; i < tokens.length; i += chunk) {
-      if (cancelRef.current) break;
-      acc += tokens.slice(i, i + chunk).join("");
-      setFinalShown(acc);
-      await delay(16);
-    }
-    setFinalShown(o.final);
-    if (o.artifact) {
-      setArtifact({ id: newId(), ...o.artifact });
-    }
-    setPhase("done");
   };
 
   const stop = () => {
-    cancelRef.current = true;
+    abortRef.current?.abort();
+    setPhase("done");
   };
 
   const reset = () => {
-    cancelRef.current = true;
+    abortRef.current?.abort();
     setPhase("idle");
-    setOrch(null);
+    setSubject("");
+    setPlan([]);
+    setTeam([]);
     setLog([]);
     setDone(new Set());
     setCurrent(null);
     setFinalShown("");
+    setErrMsg("");
     setArtifact(null);
   };
 
-  const busy = phase === "planning" || phase === "running";
+  const busy = phase === "planning" || phase === "running" || phase === "synthesizing";
 
   return (
     <div className="relative flex h-full">
@@ -145,12 +295,20 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           <IdleHome onRun={run} examples={EXAMPLES} />
         ) : (
           <RunningView
-            orch={orch}
+            subject={subject}
+            kind={kind}
+            plan={plan}
+            team={team}
             phase={phase}
             log={log}
             current={current}
+            currentModel={currentModel}
             done={done}
             finalShown={finalShown}
+            synthBy={synthBy}
+            researchChars={researchChars}
+            redacted={redacted}
+            errMsg={errMsg}
             busy={busy}
             logRef={logRef}
             artifact={artifact}
@@ -199,7 +357,7 @@ function IdleHome({
 
         {/* the team */}
         <div className="mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {AGENTS.map((a) => (
+          {SPECIALISTS.map((a) => (
             <div
               key={a.id}
               className="flex flex-col items-start gap-1.5 rounded-2xl border border-line bg-cream p-3 dark:border-night-surface dark:bg-night-surface/50"
@@ -274,42 +432,67 @@ function IdleHome({
 
 /* ------------------------------- running ---------------------------------- */
 function agentStatus(
-  id: AgentId,
-  selected: AgentId[],
-  current: AgentId | null,
-  done: Set<AgentId>
+  id: SpecialistId,
+  team: TeamMember[],
+  current: SpecialistId | null,
+  done: Set<SpecialistId>
 ): "standby" | "queued" | "working" | "done" {
   if (done.has(id)) return "done";
   if (current === id) return "working";
-  if (selected.includes(id)) return "queued";
+  if (team.some((t) => t.id === id)) return "queued";
   return "standby";
 }
 
+function Dots() {
+  return (
+    <span className="flex gap-1">
+      <span className="dot h-1.5 w-1.5 rounded-full bg-coral" />
+      <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.15s" }} />
+      <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.3s" }} />
+    </span>
+  );
+}
+
 function RunningView({
-  orch,
+  subject,
+  kind,
+  plan,
+  team,
   phase,
   log,
   current,
+  currentModel,
   done,
   finalShown,
+  synthBy,
+  researchChars,
+  redacted,
+  errMsg,
   busy,
   logRef,
   artifact,
   onStop,
 }: {
-  orch: Orchestration | null;
+  subject: string;
+  kind: string;
+  plan: string[];
+  team: TeamMember[];
   phase: Phase;
   log: Stage[];
-  current: AgentId | null;
-  done: Set<AgentId>;
+  current: SpecialistId | null;
+  currentModel: string;
+  done: Set<SpecialistId>;
   finalShown: string;
+  synthBy: string;
+  researchChars: number;
+  redacted: string[] | null;
+  errMsg: string;
   busy: boolean;
   logRef: RefObject<HTMLDivElement | null>;
   artifact: Artifact | null;
   onStop: () => void;
 }) {
-  if (!orch) return null;
-  const selected = orch.selected;
+  const currentSpec = current ? SPECIALISTS.find((s) => s.id === current) : null;
 
   return (
     <>
@@ -319,10 +502,25 @@ function RunningView({
           <div className="animate-rise mb-4 rounded-2xl border border-line bg-cream-surface/60 p-4 dark:border-night-surface dark:bg-night-surface/40">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
               <SparkleIcon size={13} /> Task
+              <span className="rounded bg-coral/15 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-coral">
+                {kind}
+              </span>
             </div>
-            <div className="text-[15px] font-medium text-ink dark:text-cream">
-              {orch.subject}
-            </div>
+            <div className="text-[15px] font-medium text-ink dark:text-cream">{subject}</div>
+            {(redacted?.length || researchChars > 0) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {redacted?.length ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                    🔒 redacted: {redacted.join(", ")}
+                  </span>
+                ) : null}
+                {researchChars > 0 && (
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10.5px] font-medium text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
+                    🌐 web research · {researchChars.toLocaleString()} chars
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* plan */}
@@ -331,19 +529,17 @@ function RunningView({
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-coral text-[12px] text-white">
                 {MASTER.emoji}
               </span>
-              {MASTER.name}'s plan
+              {MASTER.name}&apos;s plan
             </div>
             <ol className="space-y-1.5 pl-1">
-              {orch.plan.map((step, i) => {
-                const stepDone = phase === "running" || phase === "done";
+              {plan.map((step, i) => {
+                const stepDone = i < log.length || phase === "done";
                 return (
                   <li key={i} className="flex gap-2.5 text-[14px] text-ink-soft dark:text-cream/80">
                     <span
                       className={cn(
                         "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                        stepDone
-                          ? "bg-coral/15 text-coral"
-                          : "bg-cream-deep text-muted dark:bg-night-surface"
+                        stepDone ? "bg-coral/15 text-coral" : "bg-cream-deep text-muted dark:bg-night-surface"
                       )}
                     >
                       {stepDone ? <CheckIcon size={12} /> : i + 1}
@@ -356,12 +552,13 @@ function RunningView({
           </div>
 
           {/* agent status grid */}
-          <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-7">
-            {AGENTS.map((a) => {
-              const st = agentStatus(a.id, selected, current, done);
+          <div className="mb-4 grid grid-cols-4 gap-2 sm:grid-cols-8">
+            {SPECIALISTS.map((a) => {
+              const st = agentStatus(a.id, team, current, done);
               return (
                 <div
                   key={a.id}
+                  title={`${a.name} — ${a.blurb}`}
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl border p-2 text-center transition",
                     st === "working"
@@ -379,20 +576,14 @@ function RunningView({
                       <span className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-spin-slow rounded-full border-2 border-coral border-t-transparent" />
                     )}
                   </span>
-                  <span className="text-[11px] font-medium text-ink dark:text-cream">
-                    {a.name}
-                  </span>
+                  <span className="text-[11px] font-medium text-ink dark:text-cream">{a.name}</span>
                   <span
                     className={cn(
                       "text-[9px] font-semibold uppercase tracking-wide",
-                      st === "done"
-                        ? "text-emerald-600"
-                        : st === "working"
-                        ? "text-coral"
-                        : "text-muted-2"
+                      st === "done" ? "text-emerald-600" : st === "working" ? "text-coral" : "text-muted-2"
                     )}
                   >
-                    {st === "done" ? "done" : st === "working" ? "working" : st === "queued" ? "queued" : "standby"}
+                    {st === "standby" ? "standby" : st}
                   </span>
                 </div>
               );
@@ -406,73 +597,98 @@ function RunningView({
                 {MASTER.emoji}
               </span>
               <span className="flex items-center gap-1.5">
-                Analyzing the task and assembling the team
-                <span className="flex gap-1">
-                  <span className="dot h-1.5 w-1.5 rounded-full bg-coral" />
-                  <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.15s" }} />
-                  <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.3s" }} />
-                </span>
+                Analyzing the task and assembling the team <Dots />
               </span>
             </div>
           )}
 
           {/* activity timeline */}
           <div className="space-y-3">
-            {log.map((stage, i) => {
-              const a = getAgent(stage.agentId);
-              return (
-                <div key={i} className="animate-rise flex gap-3">
-                  <span
-                    className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[16px]"
-                    style={{ backgroundColor: a.color + "22" }}
-                  >
-                    {a.emoji}
-                  </span>
-                  <div className="min-w-0 flex-1 rounded-2xl border border-line bg-cream p-3.5 dark:border-night-surface dark:bg-night-surface/40">
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="text-[13px] font-semibold text-ink dark:text-cream">
-                        {a.name}
-                      </span>
-                      <span
-                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
-                        style={{ backgroundColor: a.color + "22", color: a.color }}
-                      >
-                        {a.role}
-                      </span>
-                      <span className="text-[11px] text-muted-2">· {stage.action}</span>
-                    </div>
-                    <Markdown text={stage.output} />
+            {log.map((stage, i) => (
+              <div key={i} className="animate-rise flex gap-3">
+                <span
+                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[16px]"
+                  style={{ backgroundColor: stage.color + "22" }}
+                >
+                  {stage.emoji}
+                </span>
+                <div
+                  className={cn(
+                    "min-w-0 flex-1 rounded-2xl border p-3.5",
+                    stage.ok
+                      ? "border-line bg-cream dark:border-night-surface dark:bg-night-surface/40"
+                      : "border-red-300/50 bg-red-50/50 dark:border-red-500/30 dark:bg-red-500/5"
+                  )}
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="text-[13px] font-semibold text-ink dark:text-cream">{stage.name}</span>
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                      style={{ backgroundColor: stage.color + "22", color: stage.color }}
+                    >
+                      {stage.role}
+                    </span>
+                    <span className="text-[11px] text-muted-2">
+                      · {stage.model} · {(stage.ms / 1000).toFixed(1)}s
+                    </span>
                   </div>
+                  {stage.ok ? (
+                    <Markdown text={stage.output} />
+                  ) : (
+                    <div className="text-[13px] text-red-700 dark:text-red-300">
+                      Ye agent nahi chal saka — {stage.error ?? "unknown error"}
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
 
             {/* current working indicator */}
-            {busy && current && (
+            {busy && currentSpec && (
               <div className="animate-fade flex items-center gap-3 pl-1 text-[13px] text-muted">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full text-[16px]"
-                  style={{ backgroundColor: getAgent(current).color + "22" }}>
-                  {getAgent(current).emoji}
+                <span
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[16px]"
+                  style={{ backgroundColor: currentSpec.color + "22" }}
+                >
+                  {currentSpec.emoji}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  {getAgent(current).name} is working
-                  <span className="flex gap-1">
-                    <span className="dot h-1.5 w-1.5 rounded-full bg-coral" />
-                    <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.15s" }} />
-                    <span className="dot h-1.5 w-1.5 rounded-full bg-coral" style={{ animationDelay: "0.3s" }} />
-                  </span>
+                  {currentSpec.name} is working
+                  {currentModel && <span className="text-muted-2">· {currentModel}</span>}
+                  <Dots />
+                </span>
+              </div>
+            )}
+
+            {phase === "synthesizing" && (
+              <div className="animate-fade flex items-center gap-3 pl-1 text-[13px] text-muted">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-coral/15 text-[16px]">
+                  {MASTER.emoji}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  {MASTER.name} sab ka kaam mila kar final jawab bana raha hai <Dots />
                 </span>
               </div>
             )}
           </div>
 
+          {errMsg && (
+            <div className="animate-rise mt-4 rounded-2xl border border-red-300/60 bg-red-50 p-4 text-[13.5px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              <div className="mb-1 font-semibold">Kuch ghalat ho gaya</div>
+              {errMsg}
+            </div>
+          )}
+
           {/* final deliverable */}
           {finalShown && (
             <div className="animate-rise mt-4 rounded-2xl border-2 border-coral/30 bg-cream p-4 shadow-[0_8px_30px_rgba(217,119,87,0.1)] dark:bg-night-surface/40">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-coral">
+                <SparkleIcon size={13} /> Final deliverable
+              </div>
               <Markdown text={finalShown} />
               {artifact && (
                 <div className="mt-3 flex items-center gap-2 rounded-lg bg-coral-soft px-3 py-2 text-[12px] font-medium text-coral-hover dark:bg-coral/15">
-                  <ClaudeLogo size={14} /> Live build ready in the preview panel →
+                  <ClaudeLogo size={14} /> Code ready in the panel →
                 </div>
               )}
             </div>
@@ -492,7 +708,8 @@ function RunningView({
             </button>
           ) : (
             <span className="text-[12px] text-muted">
-              {MASTER.name} finished · {log.length} agents contributed
+              {MASTER.name} finished · {log.filter((l) => l.ok).length} agents contributed
+              {synthBy && !synthBy.startsWith("none") && ` · synthesized by ${synthBy}`}
             </span>
           )}
         </div>

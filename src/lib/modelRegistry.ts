@@ -32,6 +32,12 @@ export interface Entry {
   /** capability tags */
   tags: string[];
   /**
+   * Known-broken: key mojood hai magar provider paisa/subscription maangta
+   * hai. Entry rakhi jati hai (top-up karte hi chal jaye) magar selection me
+   * sab se aakhir me aati hai.
+   */
+  degraded?: boolean;
+  /**
    * Quality rank — LOWER IS BETTER. Yehi decide karta hai kaunsa model
    * pehle try hoga. Frontier models = 1-20, keyless junk = 90+.
    */
@@ -222,6 +228,7 @@ export const REGISTRY: Entry[] = [
     url: "https://openrouter.ai/api/v1/chat/completions",
     model: "nvidia/nemotron-3-ultra-550b-a55b:free",
     envKey: "OPENROUTER_API_KEY",
+    degraded: true, // live: lambe prompt par khaali jawab (25s+)
     tags: ["reasoning", "knowledge", "general", "math"],
     rank: 20,
     // ⚠ Live probe: model ne khud "October 2024" bataya (ek aur run me
@@ -273,6 +280,7 @@ export const REGISTRY: Entry[] = [
     url: "https://openrouter.ai/api/v1/chat/completions",
     model: "google/gemma-4-26b-a4b-it:free",
     envKey: "OPENROUTER_API_KEY",
+    degraded: true, // live: lambe prompt par khaali jawab (25s+)
     tags: ["knowledge", "general", "fast"],
     rank: 16,
     cutoff: "2024",
@@ -285,6 +293,7 @@ export const REGISTRY: Entry[] = [
     url: "https://openrouter.ai/api/v1/chat/completions",
     model: "cohere/north-mini-code:free",
     envKey: "OPENROUTER_API_KEY",
+    degraded: true, // live: lambe prompt par khaali jawab (25s+)
     tags: ["coding"],
     rank: 24,
     cutoff: "2024-06", // live probe (aur 11s slow tha)
@@ -334,6 +343,7 @@ export const REGISTRY: Entry[] = [
     url: "https://openrouter.ai/api/v1/chat/completions",
     model: "openrouter/auto",
     envKey: "OPENROUTER_API_KEY",
+    degraded: true, // live: 15s tak khaali jawab
     tags: ["general"],
     rank: 26,
     cutoff: "2024-04", // live probe
@@ -350,6 +360,7 @@ export const REGISTRY: Entry[] = [
     url: "https://api.airforce/v1/chat/completions",
     model: "mistral-large-latest",
     envKey: "AIRFORCE_API_KEY",
+    degraded: true, // baqi models subscription-only; ye bhi 2021 cutoff
     tags: ["general", "creative"],
     rank: 60,
     // ⚠ Live probe: is model ne "September 2021" bataya — bohot purana.
@@ -367,6 +378,7 @@ export const REGISTRY: Entry[] = [
     url: "https://api.bazaarlink.ai/v1/chat/completions",
     model: "glm-5.2",
     envKey: "BAZAARLINK_API_KEY",
+    degraded: true, // live: "Insufficient credits. Please top up"
     tags: ["reasoning", "knowledge", "coding", "general"],
     rank: 55,
     cutoff: "2025",
@@ -379,6 +391,7 @@ export const REGISTRY: Entry[] = [
     url: "https://api.bazaarlink.ai/v1/chat/completions",
     model: "gemini-3.1-pro-preview",
     envKey: "BAZAARLINK_API_KEY",
+    degraded: true, // live: "Insufficient credits. Please top up"
     tags: ["reasoning", "knowledge", "coding", "math", "general"],
     rank: 56,
     cutoff: "2025",
