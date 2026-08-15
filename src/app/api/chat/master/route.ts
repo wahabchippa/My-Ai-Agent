@@ -49,6 +49,7 @@ const MODELS: ModelConfig[] = [
   { id: "or-deepseek", name: "DeepSeek Chat", url: "https://openrouter.ai/api/v1/chat/completions", model: "deepseek/deepseek-chat-v3.1:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "general"] },
   { id: "or-qwen-coder", name: "Qwen 3 Coder", url: "https://openrouter.ai/api/v1/chat/completions", model: "qwen/qwen3-coder:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["coding", "reasoning"] },
   { id: "llm7-gemini", name: "Gemini Flash", url: "https://api.llm7.io/v1/chat/completions", model: "gemini-3.1-flash-lite", tags: ["fast", "general", "knowledge"] },
+  { id: "gemini", name: "Gemini 2.5 Flash", url: "gemini", model: "gemini-2.5-flash", key: process.env.GEMINI_API_KEY || "", tags: ["reasoning", "knowledge", "general", "creative", "fast"] },
   { id: "pollinations", name: "GPT-OSS Fast", url: "https://text.pollinations.ai/openai", model: "openai-fast", tags: ["fast", "general"] },
 ];
 
@@ -161,11 +162,33 @@ function selectAgents(classification: Classification): ModelConfig[] {
   return selected.slice(0, 5);
 }
 
-// ─── Model caller ───
+// ─── Model caller (OpenAI-compatible, plus special Gemini format) ───
 async function callModel(model: ModelConfig, system: string, messages: Msg[], timeoutMs: number): Promise<{ name: string; text: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
+    // Gemini uses its own API format (not OpenAI-compatible).
+    if (model.url === "gemini") {
+      if (!model.key) throw new Error(`${model.name} no key`);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:generateContent?key=${encodeURIComponent(model.key)}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+          generationConfig: { temperature: 0.7 },
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${model.name} failed: ${d?.error?.message || r.status}`);
+      const text = d?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ?? "";
+      if (!text || text.length < 5) throw new Error(`${model.name} empty`);
+      return { name: model.name, text };
+    }
+
     const r = await fetch(model.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(model.key ? { Authorization: `Bearer ${model.key}` } : {}) },
@@ -291,6 +314,32 @@ Answer the user's question with detail, accuracy, and genuine usefulness. Give r
 
   // ─── STEP 3a: SIMPLE question → single model, no consensus ───
   if (!classification.needsConsensus && selectedAgents.length <= 1) {
+    // Prefer Gemini (smartest free model) when a key is set; fall back to Groq.
+    const gemKey = process.env.GEMINI_API_KEY || "";
+    if (gemKey) {
+      try {
+        const gres = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(gemKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: baseSystem }] },
+              contents: b.messages.map((m: Msg) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+              generationConfig: { temperature: 0.7 },
+            }),
+          }
+        );
+        const gd = await gres.json().catch(() => ({}));
+        const gtext = gd?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ?? "";
+        if (gres.ok && gtext) {
+          if (authUser) logUsage({ userId: authUser.id, type: classification.type, mode, success: true }).catch(() => {});
+          return new Response(gtext, {
+            headers: { "Content-Type": "text/plain; charset=utf-8", "X-Orchestrator": classification.reasoning, "X-Model": "gemini-2.5-flash", ...corsHeaders },
+          });
+        }
+      } catch {}
+    }
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -371,6 +420,39 @@ RULES:
     { url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "" },
     { url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "" },
   ];
+
+  // Gemini is the smartest available model — try it first for the master answer.
+  const gemKey = process.env.GEMINI_API_KEY || "";
+  if (gemKey) {
+    try {
+      const gres = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(gemKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: masterSystem }] },
+            contents: [{ role: "user", parts: [{ text: masterInput }] }],
+            generationConfig: { temperature: 0.4 },
+          }),
+        }
+      );
+      const gd = await gres.json().catch(() => ({}));
+      const gtext = gd?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ?? "";
+      if (gres.ok && gtext) {
+        if (authUser) logUsage({ userId: authUser.id, type: classification.type, mode, agentsUsed: agentNames.join(", "), estimatedCost: "0", success: true }).catch(() => {});
+        return new Response(gtext, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "X-Orchestrator": classification.reasoning,
+            "X-Agents-Used": agentNames.join(", "),
+            "X-Master": "gemini-2.5-flash",
+            ...corsHeaders,
+          },
+        });
+      }
+    } catch {}
+  }
 
   for (const provider of masterProviders) {
     try {
