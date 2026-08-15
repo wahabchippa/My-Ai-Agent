@@ -88,14 +88,42 @@ Is fix ke baad pehli dafa **teenon agents aik run me kaamyab** huye (30s).
 
 ## Jo key ke sath aur behtar ho sakta hai
 
+**❌ Cerebras — rehne dein.** User ne khud kai baar check kiya: free limit
+khatam ho jati hai (5 RPM / 250 RPD kaghaz par, amal me bohot kam). Registry
+me entry mojood hai aur key na hone par khud-ba-khud skip ho jati hai, magar
+is par waqt lagane ka faida nahi.
+
 Agar aap 2 minute me sign-up karna chahen (sab free, koi card nahi):
 
 | Provider | Quota | Kyun |
 |---|---|---|
-| **Cerebras** | 5 RPM / 250 RPD | Registry me **pehle se mojood**, sirf `CEREBRAS_API_KEY` chahiye |
-| **NVIDIA NIM** | 40 RPM / uncapped TPD | 100+ models, OpenAI-compatible (phone verification) |
-| **Void AI** | **100 RPM** / 125k credits | Sab se zyada RPM; abhi 500 de raha tha, baad me dobara dekhein |
+| **NVIDIA NIM** | 40 RPM / uncapped TPD | 100+ models, OpenAI-compatible. Sab se bara free catalogue (phone verification chahiye) |
 | **Poixe** | 10,000 RPD / 10M TPD | Sab se bara daily quota |
+| **Void AI** | **100 RPM** / 125k credits | Sab se zyada RPM. Probe par 500 de raha tha — baad me dobara dekhein |
+| **MegaNova** | 60 RPM / 550 RPD / 200k TPM | Achha RPM/RPD balance |
 
-Abhi sara bojh Groq + Gemini par hai, aur dono aksar 429 dete hain. Sirf
-Cerebras ki key daalne se hi kaafi farq parega — code pehle se tayyar hai.
+Abhi sara bojh Groq + Gemini par hai. Testing me aik hi run me **11 model
+tries** lagin kyunki dono bar bar 429 de rahe the. OpenCode Zen ab fallback
+ka kaam de deta hai (bina key ke), magar wo reasoning model hai — lambe kaam
+par 25-30s leta hai. Asal hal ek aur tez provider hai.
+
+## Zaroori sabak: keyless models chup-chaap bahar the
+
+Zen add karne ke baad bhi wo kisi test me nahi chala. Wajah `pickModels()`
+me thi:
+
+```ts
+pool.filter((e) => e.envKey && !usedIds.has(e.id))
+```
+
+Keyless entries ka `envKey` `""` hai — **falsy** — to ye filter unhe poori
+tarah bahar kar deta tha. Sirf Zen nahi, Pollinations aur LLM7 bhi kabhi
+fallback nahi bane. Bug chhupa raha kyunki key wale models aksar chal jate
+the.
+
+`available()` pehle hi ye guarantee deta hai ke entry ki key set hai YA wo
+keyless hai — yahan dobara filter karne ki zaroorat hi nahi thi.
+
+Fix ke baad verify kiya: **zero keys par bhi app chalti hai** (5 models
+available, Zen ne 885ms me jawab diya), aur research task me Logos asal me
+Zen par chala.
