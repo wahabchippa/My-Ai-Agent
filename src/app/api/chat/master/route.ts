@@ -43,7 +43,11 @@ const MODELS: ModelConfig[] = [
   { id: "bl-qwen", name: "Qwen 3.7", url: "https://api.bazaarlink.ai/v1/chat/completions", model: "qwen/qwen3.7-flash:free", key: process.env.BAZAARLINK_API_KEY || "", tags: ["coding", "knowledge", "creative"] },
   { id: "af-mistral", name: "Mistral Large", url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "", tags: ["reasoning", "creative", "knowledge", "general"] },
   { id: "or-nemotron", name: "Nemotron 120B", url: "https://openrouter.ai/api/v1/chat/completions", model: "nvidia/nemotron-3-super-120b-a12b:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "knowledge"] },
+  { id: "or-nemotron-ultra", name: "Nemotron 550B", url: "https://openrouter.ai/api/v1/chat/completions", model: "nvidia/nemotron-3-ultra-550b-a55b:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "knowledge", "general"] },
   { id: "or-gemma", name: "Gemma 4 31B", url: "https://openrouter.ai/api/v1/chat/completions", model: "google/gemma-4-31b-it:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["knowledge", "general", "fast"] },
+  { id: "or-gptoss", name: "GPT-OSS 120B", url: "https://openrouter.ai/api/v1/chat/completions", model: "openai/gpt-oss-120b:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "math"] },
+  { id: "or-deepseek", name: "DeepSeek Chat", url: "https://openrouter.ai/api/v1/chat/completions", model: "deepseek/deepseek-chat-v3.1:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "general"] },
+  { id: "or-qwen-coder", name: "Qwen 3 Coder", url: "https://openrouter.ai/api/v1/chat/completions", model: "qwen/qwen3-coder:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["coding", "reasoning"] },
   { id: "llm7-gemini", name: "Gemini Flash", url: "https://api.llm7.io/v1/chat/completions", model: "gemini-3.1-flash-lite", tags: ["fast", "general", "knowledge"] },
   { id: "pollinations", name: "GPT-OSS Fast", url: "https://text.pollinations.ai/openai", model: "openai-fast", tags: ["fast", "general"] },
 ];
@@ -358,9 +362,12 @@ RULES:
   const masterInput = `${research ? `WEB RESEARCH:\n${research}\n\n` : ""}AGENT ANSWERS:\n${allAnswers}\n\nUSER'S QUESTION: ${lastUser}\n\nWrite the definitive final answer:`;
 
   // ─── STEP 5: STREAM the Master AI's answer ───
-  // Primary: Groq Llama 70B (fastest + smartest)
+  // Primary: Groq Llama 70B (fast + smart); OpenRouter Nemotron 550B & GPT-OSS
+  // as strong alternatives via the user's OpenRouter key.
   const masterProviders = [
     { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile", key: groqKey },
+    { url: "https://openrouter.ai/api/v1/chat/completions", model: "nvidia/nemotron-3-ultra-550b-a55b:free", key: process.env.OPENROUTER_API_KEY || "" },
+    { url: "https://openrouter.ai/api/v1/chat/completions", model: "openai/gpt-oss-120b:free", key: process.env.OPENROUTER_API_KEY || "" },
     { url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "" },
     { url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "" },
   ];

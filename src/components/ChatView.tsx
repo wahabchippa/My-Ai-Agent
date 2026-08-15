@@ -151,15 +151,11 @@ export function ChatView({
     if (!realConfig) {
       try {
         patchMessage(convId, assistantId, {
-          thinking: ["Analyzing your question"],
+          thinking: ["Thinking"],
         });
-        await delay(600);
+        await delay(700);
         patchMessage(convId, assistantId, {
-          thinking: ["Selecting the best AI models for this task"],
-        });
-        await delay(500);
-        patchMessage(convId, assistantId, {
-          thinking: ["Running models in parallel", "Cross-checking with web research"],
+          thinking: ["Thinking", "Preparing your answer"],
         });
 
         const res = await fetch("/api/chat/master", {
