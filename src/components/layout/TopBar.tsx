@@ -19,10 +19,8 @@ export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileN
 
   const viewTitles: Record<ViewType, string> = {
     chat: "AI Chat",
-    models: "AI Models & Keys",
     projects: "Projects",
     workspace: "Coding Workspace",
-    studio: "Studio",
     settings: "Settings",
     admin: "Admin Dashboard",
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { NexoraLogo, UsersIcon, CreditCardIcon, BarChartIcon, ActivityIcon, SettingsIcon, ShieldIcon, ClipboardIcon, DatabaseIcon, RefreshIcon, SearchIcon, ChevronDownIcon, CheckIcon, CloseIcon, EditIcon, TrashIcon } from "../ui/icons";
+import { UsersIcon, CreditCardIcon, BarChartIcon, ActivityIcon, SettingsIcon, ShieldIcon, ClipboardIcon, DatabaseIcon, RefreshIcon, SearchIcon, ChevronDownIcon, CheckIcon, CloseIcon, EditIcon, TrashIcon } from "../ui/icons";
 import { cn } from "@/utils/cn";
 
 // ═══════════════════════════════════════════

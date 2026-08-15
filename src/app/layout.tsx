@@ -3,9 +3,13 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nexora — multi-model AI chat, agents, app builder & video studio",
+  title: "Nexora — multi-model AI chat, agents & app builder",
   description:
-    "Nexora — real AI models via the backend (OpenRouter and more), a master multi-agent, an app/website builder with live preview, a code terminal, and an image→video studio.",
+    "Nexora — real AI models via the backend (OpenRouter and more), a master multi-agent, an app/website builder with live preview, and a code terminal.",
+  icons: {
+    icon: "/nexora-logo.png",
+    apple: "/nexora-logo.png",
+  },
 };
 
 export const viewport: Viewport = {

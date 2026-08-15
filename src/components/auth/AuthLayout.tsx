@@ -1,6 +1,6 @@
 "use client";
 
-import { NexoraLogo, BrainIcon, GlobeIcon, CodeIcon, SparklesIcon } from "../ui/icons";
+import { BrainIcon, GlobeIcon, CodeIcon, SparklesIcon } from "../ui/icons";
 
 const features = [
   { icon: BrainIcon, title: "Multi-Agent AI", description: "9+ AI models working in parallel consensus" },
@@ -22,7 +22,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-surface border-r border-border p-8">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <NexoraLogo size={40} />
+          <img src="/nexora-logo.png" alt="Nexora" className="h-10 w-10 rounded-full object-cover" />
           <div>
             <span className="text-xl font-bold text-text">Nexora</span>
             <span className="ml-2 text-xs text-text-muted">AI Platform</span>
@@ -68,7 +68,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-            <NexoraLogo size={48} />
+            <img src="/nexora-logo.png" alt="Nexora" className="h-12 w-12 rounded-full object-cover" />
             <span className="text-2xl font-bold text-text">Nexora</span>
           </div>
 

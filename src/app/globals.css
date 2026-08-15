@@ -196,9 +196,22 @@ html, body, #root {
 }
 
 /* ─── Focus States ─── */
+/* ─── Focus States ───
+   Use a rounded, border-radius-aware focus ring so it follows the shape of
+   rounded buttons/cards. Inputs & textareas have their own focus styles and
+   should NOT get a hard square outline. */
 *:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+  border-radius: inherit;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
 /* ─── Selection ─── */

@@ -1,6 +1,6 @@
 "use client";
 
-import { NexoraLogo, ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon, SunIcon, MoonIcon, LogOutIcon, SparklesIcon, GridIcon, HistoryIcon, HelpCircleIcon } from "../ui/icons";
+import { ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon, SunIcon, MoonIcon, LogOutIcon, HistoryIcon, HelpCircleIcon } from "../ui/icons";
 import { cn } from "@/utils/cn";
 import type { ViewType } from "./Shell";
 
@@ -23,10 +23,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "chat", label: "Chat", icon: ChatIcon },
-  { id: "models", label: "Models", icon: SparklesIcon },
   { id: "projects", label: "Projects", icon: FolderIcon },
   { id: "workspace", label: "Workspace", icon: CodeIcon },
-  { id: "studio", label: "Studio", icon: GridIcon },
   { id: "settings", label: "Settings", icon: SettingsIcon },
   { id: "admin", label: "Admin", icon: ShieldIcon, adminOnly: true },
 ];
@@ -55,7 +53,7 @@ export function Navigation({
         expanded ? "px-4 py-4" : "justify-center py-4"
       )}>
         <div className="relative">
-          <NexoraLogo size={32} />
+          <img src="/nexora-logo.png" alt="Nexora" className="h-8 w-8 rounded-full object-cover" />
           <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-surface" />
         </div>
         {expanded && (
