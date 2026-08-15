@@ -2,152 +2,870 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ═══════════════════════════════════════════════════════════════════
+   NEXORA DESIGN SYSTEM — Original AI Platform Identity
+   ═══════════════════════════════════════════════════════════════════ */
+
 @theme {
-  /* Claude warm cream backgrounds */
-  --color-cream: #faf9f5;
-  --color-cream-surface: #f0eee6;
-  --color-cream-deep: #ece9df;
-
-  /* Claude coral / clay accent */
-  --color-coral: #d97757;
-  --color-coral-hover: #c15f3f;
-  --color-coral-soft: #f3e7df;
-
-  /* Inks & neutrals */
-  --color-ink: #1f1e1d;
-  --color-ink-soft: #3d3a33;
-  --color-muted: #87867e;
-  --color-muted-2: #a8a69d;
-  --color-line: #e5e3da;
-
-  /* Dark theme */
-  --color-night: #262624;
-  --color-night-surface: #30302e;
-  --color-night-deep: #1d1d1b;
-
-  --font-serif: "Georgia", "Cambria", "Times New Roman", serif;
-  --font-sans: "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
-    Menlo, Consolas, monospace;
+  /* ─── Primary: Deep Space ─── */
+  --color-void: #0a0a0f;
+  --color-surface: #12121a;
+  --color-elevated: #1a1a24;
+  --color-subtle: #242430;
+  --color-border: #2a2a38;
+  --color-border-glow: #3a3a4a;
+  
+  /* ─── Accent: Electric Cyan ─── */
+  --color-accent: #00d4ff;
+  --color-accent-soft: #00d4ff20;
+  --color-accent-glow: #00d4ff40;
+  --color-accent-hover: #00b8e6;
+  --color-accent-dim: #008fb3;
+  
+  /* ─── Secondary: Nebula Purple ─── */
+  --color-nebula: #8b5cf6;
+  --color-nebula-soft: #8b5cf620;
+  --color-nebula-glow: #8b5cf640;
+  
+  /* ─── Status Colors ─── */
+  --color-success: #10b981;
+  --color-success-soft: #10b98120;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #f59e0b20;
+  --color-danger: #ef4444;
+  --color-danger-soft: #ef444420;
+  --color-info: #3b82f6;
+  --color-info-soft: #3b82f620;
+  
+  /* ─── Text Hierarchy ─── */
+  --color-text: #f0f0f5;
+  --color-text-secondary: #a0a0b0;
+  --color-text-muted: #606070;
+  --color-text-dim: #404050;
+  
+  /* ─── Light Theme ─── */
+  --color-light-bg: #f8f9fc;
+  --color-light-surface: #ffffff;
+  --color-light-elevated: #f0f1f5;
+  --color-light-border: #e0e2e8;
+  --color-light-text: #1a1a2e;
+  --color-light-secondary: #4a4a60;
+  --color-light-muted: #8a8a9a;
+  
+  /* ─── Gradients ─── */
+  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
+  --gradient-surface: linear-gradient(180deg, #1a1a24 0%, #12121a 100%);
+  --gradient-glow: radial-gradient(ellipse at center, #00d4ff10 0%, transparent 70%);
+  
+  /* ─── Typography ─── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  /* ─── Spacing System (8px base) ─── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  
+  /* ─── Border Radius ─── */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-full: 9999px;
+  
+  /* ─── Shadows ─── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px var(--color-accent-glow);
+  --shadow-glow-sm: 0 0 10px var(--color-accent-glow);
 }
 
-html,
-body,
-#root {
+/* ─── Base Styles ─── */
+html, body, #root {
   height: 100%;
-}
-
-body {
-  background-color: var(--color-cream);
-  color: var(--color-ink);
+  background: var(--color-void);
+  color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle, refined scrollbars like Claude */
+/* Light mode overrides */
+.light {
+  background: var(--color-light-bg);
+  color: var(--color-light-text);
+}
+
+/* ─── Custom Scrollbars ─── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-muted-2) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
-*::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-*::-webkit-scrollbar-track {
+
+::-webkit-scrollbar-track {
   background: transparent;
 }
-*::-webkit-scrollbar-thumb {
-  background-color: var(--color-muted-2);
-  border-radius: 999px;
-  border: 3px solid transparent;
-  background-clip: content-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-muted);
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
 }
 
-/* Typing caret used in the streaming answer */
-.caret-blink::after {
-  content: "▍";
-  margin-left: 1px;
-  color: var(--color-coral);
-  animation: blink 1s steps(2, start) infinite;
-}
-@keyframes blink {
-  to {
-    visibility: hidden;
-  }
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-glow);
 }
 
-/* Fade + rise used for messages, dropdowns, panels */
-@keyframes riseIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-rise {
-  animation: riseIn 0.32s cubic-bezier(0.21, 0.61, 0.35, 1) both;
+/* ─── Focus States ─── */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.animate-fade {
-  animation: fadeIn 0.2s ease both;
+/* ─── Selection ─── */
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text);
 }
 
-/* The three-dot "thinking" loader */
-@keyframes bounceDot {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  30% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-.dot {
-  animation: bounceDot 1.2s infinite ease-in-out;
+/* ─── Animations ─── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
-@keyframes spinSlow {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.animate-spin-slow {
-  animation: spinSlow 1.4s linear infinite;
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
-/* Claude's soft radial glow behind the welcome logo */
-.claude-glow {
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(217, 119, 87, 0.16),
-    rgba(217, 119, 87, 0) 68%
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes typing {
+  0%, 60%, 100% { opacity: 0; }
+  30% { opacity: 1; }
+}
+
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-shimmer { 
+  background: linear-gradient(90deg, transparent 0%, var(--color-accent-soft) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }
+.animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+.animate-slide-down { animation: slide-down 0.3s ease-out forwards; }
+.animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
+.animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+
+/* ─── Typing Indicator ─── */
+.typing-dots span {
+  animation: typing 1.4s infinite;
+  display: inline-block;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ─── Glass Effect ─── */
+.glass {
+  background: rgba(26, 26, 36, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+}
+
+.light .glass {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--color-light-border);
+}
+
+/* ─── Gradient Text ─── */
+.gradient-text {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Glow Effects ─── */
+.glow {
+  box-shadow: var(--shadow-glow);
+}
+
+.glow-sm {
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.glow-text {
+  text-shadow: 0 0 20px var(--color-accent-glow);
+}
+
+/* ─── AI Activity Pulse ─── */
+.ai-pulse {
+  position: relative;
+}
+
+.ai-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: var(--gradient-accent);
+  opacity: 0;
+  animation: pulse-glow 2s ease-in-out infinite;
+  z-index: -1;
+}
+
+.ai-pulse.active::before {
+  opacity: 0.3;
+}
+
+/* ─── Code Block Styling ─── */
+pre, code {
+  font-family: var(--font-mono);
+}
+
+pre {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  overflow-x: auto;
+}
+
+code:not(pre code) {
+  background: var(--color-subtle);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875em;
+}
+
+/* ─── Markdown Content ─── */
+.prose {
+  max-width: none;
+  color: var(--color-text);
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: var(--color-text);
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose p {
+  margin: 0.75em 0;
+  line-height: 1.7;
+}
+
+.prose ul, .prose ol {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+}
+
+.prose li {
+  margin: 0.25em 0;
+}
+
+.prose a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 1em;
+  margin: 1em 0;
+  color: var(--color-text-secondary);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 2em 0;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.prose th, .prose td {
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.prose th {
+  background: var(--color-subtle);
+  font-weight: 600;
+}
+
+/* ─── Button Variants ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-lg);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.btn-primary {
+  background: var(--gradient-accent);
+  color: var(--color-void);
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.btn-secondary {
+  background: var(--color-subtle);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: var(--color-border);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--color-subtle);
+  color: var(--color-text);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.btn-lg {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+.btn-icon {
+  padding: 0.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+/* ─── Input Styling ─── */
+.input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text);
+  transition: all 0.15s ease;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input:hover {
+  border-color: var(--color-border-glow);
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  outline: none;
+}
+
+.light .input {
+  background: var(--color-light-surface);
+  border-color: var(--color-light-border);
+  color: var(--color-light-text);
+}
+
+/* ─── Card Component ─── */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+}
+
+.card-elevated {
+  background: var(--color-elevated);
+}
+
+.card-interactive {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ─── Badge Component ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+}
+
+.badge-accent {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.badge-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.badge-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.badge-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.badge-info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.badge-neutral {
+  background: var(--color-subtle);
+  color: var(--color-text-secondary);
+}
+
+/* ─── Tooltip ─── */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
+
+/* ─── Panel Layout ─── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-header {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.panel-footer {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ─── Responsive Utilities ─── */
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 641px) {
+  .show-mobile { display: none !important; }
+}
+
+@media (max-width: 1024px) {
+  .hide-tablet { display: none !important; }
+}
+
+/* ─── Loading Skeleton ─── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-subtle) 0%,
+    var(--color-border) 50%,
+    var(--color-subtle) 100%
   );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
 }
 
-/* Terminal scanline shimmer for Claude Code */
-.scanline {
-  background-image: linear-gradient(
-    rgba(255, 255, 255, 0.02) 50%,
-    rgba(0, 0, 0, 0.02) 50%
-  );
-  background-size: 100% 3px;
+/* ─── Avatar ─── */
+.avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  background: var(--gradient-accent);
+  color: var(--color-void);
+}
+
+.avatar-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+}
+
+.avatar-lg {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+
+/* ─── Divider ─── */
+.divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-4) 0;
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 100%;
+  background: var(--color-border);
+  margin: 0 var(--space-3);
+}
+
+/* ─── Toggle Switch ─── */
+.toggle {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  background: var(--color-subtle);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.toggle.active {
+  background: var(--color-accent);
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: white;
+  border-radius: var(--radius-full);
+  transition: transform 0.2s ease;
+}
+
+.toggle.active::after {
+  transform: translateX(1.25rem);
+}
+
+/* ─── Dropdown Menu ─── */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 12rem;
+  padding: var(--space-2);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--color-subtle);
+  color: var(--color-text);
+}
+
+.dropdown-item.danger:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* ─── Progress Bar ─── */
+.progress {
+  width: 100%;
+  height: 0.375rem;
+  background: var(--color-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--gradient-accent);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+/* ─── Tab Navigation ─── */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+.tab {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab.active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+/* ─── AI Message Bubbles ─── */
+.message-user {
+  background: var(--color-accent);
+  color: var(--color-void);
+  border-radius: var(--radius-xl) var(--radius-xl) var(--radius-sm) var(--radius-xl);
+}
+
+.message-ai {
+  background: var(--color-elevated);
+  color: var(--color-text);
+  border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+/* ─── Empty State ─── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.empty-state-icon {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: var(--space-4);
+  opacity: 0.5;
+}
+
+/* ─── Modal / Dialog ─── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
+  max-width: 32rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* ─── Notification Toast ─── */
+.toast {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  z-index: 200;
+  animation: slide-up 0.3s ease-out;
+}
+
+/* ─── Resizable Panels ─── */
+.resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover {
+  background: var(--color-accent-soft);
+}
+
+.resize-handle-h {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.resize-handle-v {
+  width: 100%;
+  height: 4px;
+  cursor: row-resize;
 }

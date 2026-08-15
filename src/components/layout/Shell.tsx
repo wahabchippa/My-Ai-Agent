@@ -1,32 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { StoreProvider } from "./lib/store";
-import { useAuth } from "./lib/useAuth";
-import { Navigation } from "./components/layout/Navigation";
-import { Sidebar } from "./components/layout/Sidebar";
-import { TopBar } from "./components/layout/TopBar";
-import { LoginScreen } from "./components/auth/LoginScreen";
-import { ChatInterface } from "./components/chat/ChatInterface";
-import { AdminDashboard } from "./components/admin/AdminDashboard";
-import { cn } from "./utils/cn";
+import { useAuth } from "@/lib/useAuth";
+import { Navigation } from "./Navigation";
+import { Sidebar } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { LoginScreen } from "../auth/LoginScreen";
+import { cn } from "@/utils/cn";
 
 export type ViewType = "chat" | "projects" | "workspace" | "admin" | "settings";
 
-function AppShell() {
+interface ShellProps {
+  children?: React.ReactNode;
+}
+
+export function Shell({ children }: ShellProps) {
   const { user, loading, logout } = useAuth();
   const [view, setView] = useState<ViewType>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  // Apply theme
+  // Apply theme to document
   useEffect(() => {
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(theme);
   }, [theme]);
 
-  // Load saved theme
+  // Load theme from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("nexora-theme") as "dark" | "light" | null;
     if (saved) setTheme(saved);
@@ -38,7 +39,7 @@ function AppShell() {
     localStorage.setItem("nexora-theme", next);
   };
 
-  // Loading
+  // Loading state
   if (loading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-void">
@@ -60,7 +61,7 @@ function AppShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-void text-text">
-      {/* Navigation Rail */}
+      {/* Left Navigation Rail */}
       <Navigation
         view={view}
         onViewChange={setView}
@@ -70,15 +71,16 @@ function AppShell() {
         onLogout={logout}
       />
 
-      {/* Sidebar */}
+      {/* Sidebar (collapsible) */}
       <Sidebar
         view={view}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="flex min-w-0 flex-1 flex-col">
+        {/* Top Bar */}
         <TopBar
           user={user}
           view={view}
@@ -87,16 +89,13 @@ function AppShell() {
           onOpenMobileNav={() => setMobileNavOpen(true)}
         />
 
+        {/* Content */}
         <div className="flex-1 overflow-hidden">
-          {view === "chat" && <ChatInterface />}
-          {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
-          {view === "projects" && <ComingSoon title="Projects" />}
-          {view === "workspace" && <ComingSoon title="Coding Workspace" />}
-          {view === "settings" && <ComingSoon title="Settings" />}
+          {children}
         </div>
       </main>
 
-      {/* Mobile Nav Overlay */}
+      {/* Mobile Navigation Overlay */}
       {mobileNavOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
@@ -120,25 +119,5 @@ function AppShell() {
         </div>
       )}
     </div>
-  );
-}
-
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <div className="text-5xl mb-4">🚀</div>
-        <h2 className="text-xl font-semibold text-text mb-2">{title}</h2>
-        <p className="text-text-secondary">Coming soon...</p>
-      </div>
-    </div>
-  );
-}
-
-export default function App() {
-  return (
-    <StoreProvider>
-      <AppShell />
-    </StoreProvider>
   );
 }

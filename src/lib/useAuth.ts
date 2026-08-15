@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export interface AppUser {
   email: string;
@@ -8,30 +8,37 @@ export interface AppUser {
   isAdmin: boolean;
 }
 
-const STORAGE_KEY = "Nexora_user";
+const STORAGE_KEY = "nexora_user";
 
-/** Dead-simple auth: email stored in localStorage. No server, no DB, no cookies. */
 export function useAuth() {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUserState] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Load user from localStorage on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setUser(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setUserState(parsed);
+      }
     } catch {}
     setLoading(false);
   }, []);
 
-  const loginUser = (u: AppUser) => {
+  const setUser = useCallback((u: AppUser) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-    setUser(u);
-  };
+    setUserState(u);
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(async () => {
+    try {
+      // Clear server session
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
     localStorage.removeItem(STORAGE_KEY);
-    setUser(null);
-  };
+    setUserState(null);
+  }, []);
 
-  return { user, loading, setUser: loginUser, logout };
+  return { user, loading, setUser, logout };
 }
