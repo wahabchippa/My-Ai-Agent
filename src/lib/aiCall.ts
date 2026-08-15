@@ -251,6 +251,55 @@ function stripThinking(t: string): string {
   if (/^<think(ing)?>/i.test(out)) {
     out = out.replace(/^<think(ing)?>/i, "").trim();
   }
+
+  // ─── TAG-BAGHAIR SOCH ───
+  // Upar wala sab kuch XML tags par mabni hai. Magar kuch models bina kisi
+  // tag ke, SEEDHE plain text me sochna shuru kar dete hain:
+  //
+  //   "Here's a thinking process:
+  //    1.  **Analyze User Input:** ...
+  //    *Flesh out content based on Vesta's points...*"
+  //
+  // Live proof (production, 16 Aug 2026): /api/agents ki synthesis ne poora
+  // internal monologue user ko de diya — including "Vesta (Code Reviewer)"
+  // yani agent ke naam bhi leak ho gaye, jo prompt me saaf mana kiya gaya tha.
+  //
+  // Pehli koshish "pehli markdown heading par kaat do" thi — wo NAAKAAM rahi,
+  // kyunki soch ke andar bhi headings hoti hain ("## 6. Test Suite" ek plan
+  // ka item tha, jawab ka nahi). Ab do-tarfa tareeqa hai:
+  const preamble =
+    /^\s*(?:here(?:'s| is)\s+(?:a|my)\s+)?(?:thinking process|thought process|reasoning|my thinking|let me think|okay,? let'?s|first,? i(?:'ll| will)|i need to)\b/i;
+
+  if (preamble.test(out)) {
+    // (1) Behtareen soorat: model ne khud soch ko `---` se alag kiya hai.
+    //     Aakhri rule ke baad wala hissa hi asli jawab hota hai.
+    const rules = [...out.matchAll(/\n\s*(?:---+|═══+|\*\*\*+)\s*\n/g)];
+    const lastRule = rules[rules.length - 1];
+    if (lastRule?.index !== undefined && out.length - lastRule.index > out.length * 0.35) {
+      out = out.slice(lastRule.index).replace(/^\s*(?:---+|═══+|\*\*\*+)\s*\n/, "").trim();
+    } else {
+      // (2) Warna: numbered/bulleted soch ke steps chhod kar aage barho.
+      //     Asli deliverable pehli AISI heading se shuru hota hai jo kisi
+      //     numbered step ke andar na ho.
+      const lines = out.split("\n");
+      let start = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const L = lines[i];
+        // Plan ke steps: "1. **Analyze**", "- **Goal:**", "*Draft...*"
+        if (/^\s*(?:\d+[.)]\s|[-*]\s+\*\*|\s*\*[A-Z])/.test(L)) continue;
+        if (/^#{1,4}\s+\S/.test(L)) { start = i; break; }
+      }
+      if (start > 0 && lines.slice(start).join("\n").length > 300) {
+        out = lines.slice(start).join("\n").trim();
+      }
+    }
+  }
+
+  // Aakhri safai: agar phir bhi soch ka jumla bacha ho to us line ko hata do.
+  out = out
+    .replace(/^\s*(?:here(?:'s| is)\s+(?:a|my)\s+)?(?:thinking|thought)\s+process[:\s]*$/gim, "")
+    .trim();
+
   return out;
 }
 

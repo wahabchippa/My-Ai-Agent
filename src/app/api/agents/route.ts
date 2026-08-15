@@ -337,13 +337,43 @@ async function runPipeline(
   // Ek agent ho to synthesis ka koi faida nahi — extra call, extra intezaar.
   // Fallback: agar synthesis na ho sake to har agent ka kaam heading ke sath
   // dikhao — warna baaki specialists ka output chup-chaap gum ho jata hai.
+  // Stitched fallback ab aksar chalta hai (synthesis validator kaafi sakht
+  // hai), is liye ye khud bhi ek acha deliverable hona chahiye. Agent ke
+  // naam ke bajaye ROLE ka heading — user ko andar ki team ka nahi pata hona
+  // chahiye, sirf ye ke kaam kis nazariye se hua.
   const stitched = () =>
     okStages.length === 1
       ? okStages[0].output
-      : okStages.map((s) => `## ${s.emoji} ${s.name} — ${s.role}\n\n${s.output}`).join("\n\n---\n\n");
+      : okStages
+          .map((s) => `## ${s.emoji} ${s.role}\n\n${s.output}`)
+          .join("\n\n---\n\n");
 
   let final = stitched();
   let synthModel = okStages.length === 1 ? "none (single agent)" : "none (stitched fallback)";
+
+  /**
+   * Synthesis ko qubool karne se pehle jaanch.
+   *
+   * Prompt me saaf likha hai "no preamble, never mention the agents" — magar
+   * reasoning models (Groq Qwen 3.6) us ki parwah nahi karte. Live par 3 me
+   * se 3 runs me poora internal monologue aaya: "**Team Output:** Contains a
+   * structured review from Vesta (Code Reviewer)…", "Self-Correction during
+   * thought:…". Prompt engineering ki 2 koshishein naakaam rahin.
+   *
+   * Isi liye ab prompt par bharosa nahi — output ko JAANCHA jata hai. Leak ho
+   * to synthesis rad, aur stitched per-agent output dikhaya jata hai (jo
+   * saaf-suthra hai aur har agent ka kaam poora rakhta hai).
+   */
+  const AGENT_NAMES = SPECIALISTS.map((x) => x.name);
+  const looksLikeThinking = (t: string): string | null => {
+    const head = t.slice(0, 1200);
+    if (/\b(?:thinking process|thought process|self-correction|let me think|i need to|i'll (?:start|structure|draft))\b/i.test(head))
+      return "internal monologue";
+    if (/\*\*Team Output:?\*\*|\bteam output\b/i.test(t)) return "team-output meta";
+    const named = AGENT_NAMES.filter((n) => new RegExp(`\\b${n}\\b`).test(t));
+    if (named.length) return `agent naam leak (${named.join(", ")})`;
+    return null;
+  };
 
   if (okStages.length > 1) {
     emit({ type: "synthesis:start" });
@@ -359,14 +389,21 @@ A team of specialists worked on this task in sequence. Merge their work into
 ONE polished deliverable for the user.
 
 RULES:
-- Deliver the actual result, not a report about the process.
-- Never mention "the team", "agents", "specialists", or their names.
+- Output ONLY the finished deliverable. No preamble, no "Here's my thinking
+  process", no numbered plan of what you are about to write, no meta-commentary.
+  Start directly with the first heading of the answer.
+- Never mention "the team", "agents", "specialists", or any of their names
+  (Sage, Logos, Forge, Vesta, Aegis, Scribe, Quill, Nova). The user must not
+  know the work was split up. Write as one single author.
 - Keep every concrete artifact intact — code blocks, tables, test suites,
   and numbers must survive verbatim.
 - Drop duplicated explanation; keep the clearest version of each point.
 - If specialists disagree on a fact, prefer the one supported by the web
   research above; if there is none, note the uncertainty.
-- Structure with markdown headings so it is easy to scan.`;
+- Structure with markdown headings so it is easy to scan.
+
+Your response must begin with the first character of the deliverable itself.
+If you catch yourself writing a plan, stop and write the deliverable instead.`;
 
       const sr = await callModel(
         synth,
@@ -379,15 +416,20 @@ RULES:
       // stitched output se buri hai. Agar synthesis sab se bare stage se
       // bhi chhoti hai, to usay rad kar do.
       const biggest = Math.max(...okStages.map((x) => x.output.length));
-      if (sr.ok && sr.text.trim().length >= biggest * 0.6) {
-        final = sr.text;
-        synthModel = sr.model;
-        break;
+      if (!sr.ok || !sr.text.trim()) continue;
+
+      const leak = looksLikeThinking(sr.text);
+      if (leak) {
+        synthModel = `${sr.model} (rad — ${leak})`;
+        continue; // agla model try karo
       }
-      if (sr.ok && sr.text.trim()) {
-        // Chali to sahi magar bohot chhoti — stitched hi rakho.
-        synthModel = `${sr.model} (rad ki gayi — bohot chhoti thi)`;
+      if (sr.text.trim().length < biggest * 0.6) {
+        synthModel = `${sr.model} (rad — bohot chhoti thi)`;
+        continue;
       }
+      final = sr.text;
+      synthModel = sr.model;
+      break;
     }
   }
 
