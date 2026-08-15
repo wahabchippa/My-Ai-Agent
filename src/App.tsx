@@ -18,7 +18,7 @@ function AppShell() {
   const [view, setView] = useState<ViewType>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
 
   // Apply theme
   useEffect(() => {

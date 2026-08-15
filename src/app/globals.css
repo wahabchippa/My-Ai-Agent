@@ -7,61 +7,83 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 @theme {
-  /* ─── Primary: Deep Space ─── */
-  --color-void: #0a0a0f;
-  --color-surface: #12121a;
-  --color-elevated: #1a1a24;
-  --color-subtle: #242430;
-  --color-border: #2a2a38;
-  --color-border-glow: #3a3a4a;
-  
-  /* ─── Accent: Electric Cyan ─── */
-  --color-accent: #00d4ff;
-  --color-accent-soft: #00d4ff20;
-  --color-accent-glow: #00d4ff40;
-  --color-accent-hover: #00b8e6;
-  --color-accent-dim: #008fb3;
-  
-  /* ─── Secondary: Nebula Purple ─── */
-  --color-nebula: #8b5cf6;
-  --color-nebula-soft: #8b5cf620;
-  --color-nebula-glow: #8b5cf640;
-  
+  /* ═══════════════════════════════════════════════════════════════════
+     NEXORA DESIGN SYSTEM — Modern & Clean (Light-First)
+     Inspired by Linear / Vercel: calm neutrals, crisp borders, one refined
+     indigo accent. Dark mode is an optional overlay (see .dark below).
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* ─── Base Surfaces (Light-first) ─── */
+  --color-void: #ffffff;              /* page background          */
+  --color-surface: #ffffff;           /* cards / panels           */
+  --color-elevated: #f8f8fa;          /* subtle raised panels     */
+  --color-subtle: #f1f1f4;            /* hover / muted fills      */
+  --color-border: #e6e6eb;            /* default borders          */
+  --color-border-glow: #d9d9e0;       /* hover borders            */
+
+  /* ─── Accent: Refined Indigo ─── */
+  --color-accent: #4f46e5;            /* primary accent           */
+  --color-accent-soft: #4f46e51a;     /* 10% tint for chips/fills */
+  --color-accent-glow: #4f46e52e;     /* glow / focus ring        */
+  --color-accent-hover: #4338ca;      /* hover                    */
+  --color-accent-dim: #7c7cf0;        /* lighter accent           */
+
+  /* ─── Secondary: Calm Violet ─── */
+  --color-nebula: #7c5cf0;
+  --color-nebula-soft: #7c5cf01a;
+  --color-nebula-glow: #7c5cf02e;
+
   /* ─── Status Colors ─── */
   --color-success: #10b981;
-  --color-success-soft: #10b98120;
-  --color-warning: #f59e0b;
-  --color-warning-soft: #f59e0b20;
-  --color-danger: #ef4444;
-  --color-danger-soft: #ef444420;
-  --color-info: #3b82f6;
-  --color-info-soft: #3b82f620;
-  
-  /* ─── Text Hierarchy ─── */
-  --color-text: #f0f0f5;
-  --color-text-secondary: #a0a0b0;
-  --color-text-muted: #606070;
-  --color-text-dim: #404050;
-  
-  /* ─── Light Theme ─── */
-  --color-light-bg: #f8f9fc;
+  --color-success-soft: #10b9811a;
+  --color-warning: #d97706;
+  --color-warning-soft: #d977061a;
+  --color-danger: #dc2626;
+  --color-danger-soft: #dc26261a;
+  --color-info: #2563eb;
+  --color-info-soft: #2563eb1a;
+
+  /* ─── Text Hierarchy (dark ink on light) ─── */
+  --color-text: #18181b;              /* headings / primary text  */
+  --color-text-secondary: #52525b;    /* body text                */
+  --color-text-muted: #8e8e98;        /* captions / hints         */
+  --color-text-dim: #c2c2cc;          /* disabled / placeholders  */
+
+  /* ─── Light Theme (canonical values) ─── */
+  --color-light-bg: #ffffff;
   --color-light-surface: #ffffff;
-  --color-light-elevated: #f0f1f5;
-  --color-light-border: #e0e2e8;
-  --color-light-text: #1a1a2e;
-  --color-light-secondary: #4a4a60;
-  --color-light-muted: #8a8a9a;
-  
+  --color-light-elevated: #f8f8fa;
+  --color-light-border: #e6e6eb;
+  --color-light-text: #18181b;
+  --color-light-secondary: #52525b;
+  --color-light-muted: #8e8e98;
+
   /* ─── Gradients ─── */
-  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
-  --gradient-surface: linear-gradient(180deg, #1a1a24 0%, #12121a 100%);
-  --gradient-glow: radial-gradient(ellipse at center, #00d4ff10 0%, transparent 70%);
-  
+  --gradient-accent: linear-gradient(135deg, #4f46e5 0%, #7c5cf0 100%);
+  --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f8f8fa 100%);
+  --gradient-glow: radial-gradient(ellipse at center, #4f46e50f 0%, transparent 70%);
+
+  /* ─── Brand Custom Colors (used across components) ───
+     Warm cream surfaces + ink text + coral accent. Now first-class tokens
+     so every existing bg-.../text-.../border-... class renders correctly. */
+  --color-cream: #faf9f5;            /* warm page background        */
+  --color-cream-deep: #f2efe7;       /* deeper warm fill            */
+  --color-cream-surface: #ffffff;    /* cards on warm bg            */
+  --color-ink: #1f1e1d;              /* near-black text             */
+  --color-ink-soft: #6f6e69;         /* secondary text              */
+  --color-coral: #d97757;            /* warm coral accent           */
+  --color-coral-hover: #c15f3f;
+  --color-coral-soft: #d977571a;
+  --color-night: #121219;            /* dark surfaces (dark mode)   */
+  --color-night-surface: #1a1a23;
+  --color-night-deep: #0d0d12;
+  --color-canvas: #f7f7f9;           /* neutral canvas              */
+
   /* ─── Typography ─── */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
-  
+
   /* ─── Spacing System (8px base) ─── */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -73,7 +95,7 @@
   --space-10: 2.5rem;
   --space-12: 3rem;
   --space-16: 4rem;
-  
+
   /* ─── Border Radius ─── */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -81,11 +103,11 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.25rem;
   --radius-full: 9999px;
-  
-  /* ─── Shadows ─── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* ─── Shadows (softer for light UI) ─── */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.06);
+  --shadow-md: 0 4px 12px rgba(24, 24, 27, 0.08);
+  --shadow-lg: 0 12px 32px rgba(24, 24, 27, 0.12);
   --shadow-glow: 0 0 20px var(--color-accent-glow);
   --shadow-glow-sm: 0 0 10px var(--color-accent-glow);
 }
@@ -100,10 +122,53 @@ html, body, #root {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Light mode overrides */
+/* Light mode is the default look (canonical tokens above). */
 .light {
   background: var(--color-light-bg);
   color: var(--color-light-text);
+}
+
+/* ─── Dark Mode Overlay ─── */
+.dark {
+  --color-void: #0a0a0f;
+  --color-surface: #12121a;
+  --color-elevated: #1a1a24;
+  --color-subtle: #242430;
+  --color-border: #2a2a38;
+  --color-border-glow: #3a3a4a;
+  --color-accent: #00d4ff;
+  --color-accent-soft: #00d4ff20;
+  --color-accent-glow: #00d4ff40;
+  --color-accent-hover: #00b8e6;
+  --color-accent-dim: #008fb3;
+  --color-nebula: #8b5cf6;
+  --color-nebula-soft: #8b5cf620;
+  --color-nebula-glow: #8b5cf640;
+  --color-success: #10b981;
+  --color-success-soft: #10b98120;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #f59e0b20;
+  --color-danger: #ef4444;
+  --color-danger-soft: #ef444420;
+  --color-info: #3b82f6;
+  --color-info-soft: #3b82f620;
+  --color-text: #f0f0f5;
+  --color-text-secondary: #a0a0b0;
+  --color-text-muted: #606070;
+  --color-text-dim: #404050;
+  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
+  --gradient-surface: linear-gradient(180deg, #1a1a24 0%, #12121a 100%);
+  --gradient-glow: radial-gradient(ellipse at center, #00d4ff10 0%, transparent 70%);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: #0a0a0f;
+  color: #f0f0f5;
+}
+
+.dark .avatar,
+.dark .btn-primary {
+  color: #0a0a0f;
 }
 
 /* ─── Custom Scrollbars ─── */
@@ -367,7 +432,7 @@ code:not(pre code) {
 
 .btn-primary {
   background: var(--gradient-accent);
-  color: var(--color-void);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -608,7 +673,7 @@ code:not(pre code) {
   font-weight: 600;
   font-size: 0.875rem;
   background: var(--gradient-accent);
-  color: var(--color-void);
+  color: #ffffff;
 }
 
 .avatar-sm {
