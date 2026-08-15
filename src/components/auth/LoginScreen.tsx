@@ -126,9 +126,33 @@ export function LoginScreen({ onSuccess, onSwitchToSignup, onSwitchToForgotPassw
 
         {/* ── Error / Success Messages ── */}
         {error && (
-          <div className="mb-4 rounded-lg bg-danger-soft border border-danger/20 px-4 py-3 text-sm text-danger animate-fade-in flex items-start gap-2">
-            <AlertIcon size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
+          <div className={cn(
+            "mb-4 rounded-lg border px-4 py-3 text-sm animate-fade-in",
+            error.includes("requires") || error.includes("environment variable")
+              ? "bg-warning-soft border-warning/20 text-warning"
+              : "bg-danger-soft border-danger/20 text-danger"
+          )}>
+            <div className="flex items-start gap-2">
+              <AlertIcon size={16} className="mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                {error.includes("requires") ? (
+                  <>
+                    <div className="font-medium mb-1">OAuth Setup Required</div>
+                    <div className="text-xs opacity-90 break-all leading-relaxed">{error}</div>
+                  </>
+                ) : (
+                  <span>{error}</span>
+                )}
+              </div>
+            </div>
+            {error && (
+              <button
+                onClick={() => setError("")}
+                className="mt-2 text-xs opacity-70 hover:opacity-100 transition"
+              >
+                Dismiss
+              </button>
+            )}
           </div>
         )}
         {success && (
