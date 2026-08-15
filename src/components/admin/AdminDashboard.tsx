@@ -303,7 +303,7 @@ function UsersTab({ email }: { email: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search users..."
-            className="input pl-10"
+            className="input !pl-10"
           />
         </div>
         <select

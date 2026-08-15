@@ -90,7 +90,7 @@ export function ForgotPasswordScreen({ onSwitchToLogin }: ForgotPasswordScreenPr
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="input pl-10"
+                className="input !pl-10"
                 required
                 disabled={loading}
                 autoFocus

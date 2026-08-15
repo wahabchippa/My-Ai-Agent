@@ -162,7 +162,7 @@ export function LoginScreen({ onSuccess, onSwitchToSignup, onSwitchToForgotPassw
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Email address</label>
             <div className="relative">
               <MailIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="input pl-10" required disabled={isAnyLoading} autoFocus />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="input !pl-10" required disabled={isAnyLoading} autoFocus />
             </div>
           </div>
 
@@ -170,7 +170,7 @@ export function LoginScreen({ onSuccess, onSwitchToSignup, onSwitchToForgotPassw
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Password</label>
             <div className="relative">
               <LockIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input pl-10 pr-10" required disabled={isAnyLoading} />
+              <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input !pl-10 !pr-10" required disabled={isAnyLoading} />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition">
                 {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
               </button>

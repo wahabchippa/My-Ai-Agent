@@ -127,7 +127,7 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
-                className="input pl-10"
+                className="input !pl-10"
                 required
                 minLength={2}
                 disabled={loading}
@@ -147,7 +147,7 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="input pl-10"
+                className="input !pl-10"
                 required
                 disabled={loading}
               />
@@ -166,7 +166,7 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="input pl-10 pr-10"
+                className="input !pl-10 !pr-10"
                 required
                 disabled={loading}
               />
