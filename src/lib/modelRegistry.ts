@@ -528,6 +528,70 @@ export const REGISTRY: Entry[] = [
     rank: 95,
     cutoff: "2023-10", // ← ASAL cutoff, jo naam se nahi pata chalta
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // OpenCode Zen — KEYLESS, magar ye baqi keyless walon jaisa nahi
+  //
+  // Milta kahan se: velo4705/awesome-free-byok-models (15 Aug 2026 verified).
+  // Ye OpenCode team ke coding-agents ke liye tuned models hain, aur — sab se
+  // ahem — `Authorization` header ke BAGHAIR HTTP 200 dete hain. Live test:
+  //   curl -X POST https://opencode.ai/zen/v1/chat/completions \
+  //     -d '{"model":"nemotron-3-ultra-free",...}'   → 200 ✔
+  //
+  // Baqi keyless (Pollinations/LLM7) ke bar-aks in ka cutoff 2025 hai, to ye
+  // STALE nahi hain — yani ye asli kaam ke qabil hain, sirf aakhri chara nahi.
+  // Isi liye rank 90+ nahi, 35-38 hai: Groq/Gemini se peeche (wo tez aur zyada
+  // bharosemand hain) magar har us cheez se aage jo key maangti hai aur
+  // available nahi.
+  //
+  // ⚠ HAD: quota IP-par-mabni hai aur tight — jald hi
+  //   {"type":"error","error":{"type":"FreeUsageLimitError"}}  aa jata hai.
+  // Isi wajah se ye pehla intikhab nahi, DUSRA/TEESRA fallback hai: jab
+  // Gemini 429 de aur Groq bhi thak jaye, to Nexora ke paas ab bhi ek 2025
+  // cutoff wala model hai bajaye 2023 wale LLM7 ke.
+  //
+  // ⚠ DUSRI HAD — RAFTAAR: ye reasoning models hain. Chhote jawab 0.8-2.9s
+  // me aate hain (6/6 pass), magar poora code-review likhne me 25-30s lagte
+  // hain kyunki ye pehle `reasoning_content` me sochte hain. Hamara per-agent
+  // timeout 20s hai, to lambe kaam par ye aksar cut ho jate hain. Isi liye
+  // rank 35/38 — synthesis aur chhote stages ke liye behtareen backup, magar
+  // Groq (4s me poora review) ki jagah nahi le sakte.
+  //
+  // Live tested (long code-review prompt, 15 Aug 2026):
+  //   nemotron-3-ultra-free       ✔ 3/3 short (0.8-2.6s), 2985ch long @22s
+  //   hy3-free                    ✔ 3/3 short (2.2-2.9s), 2860ch long @26s
+  //   laguna-s-2.1-free           ~ 1/3 (aksar rate-limited)
+  //   mimo-v2.5-free              ✘ 0/3
+  //   big-pickle                  ✘ FreeUsageLimitError
+  //   deepseek-v4-flash-free      ✘ FreeUsageLimitError
+  //   nemotron-3.5-lightning-free ✘ apni "thinking" content me leak karta hai
+  // Sirf upar ke DO add kiye hain — baqi ko registry me daalna sirf
+  // pipeline me waqt zaya karna hai.
+  // ─────────────────────────────────────────────────────────────
+  {
+    id: "zen-nemotron-ultra",
+    name: "Nemotron 3 Ultra (Zen)",
+    provider: "OpenCodeZen",
+    fmt: "openai",
+    url: "https://opencode.ai/zen/v1/chat/completions",
+    model: "nemotron-3-ultra-free",
+    envKey: "",
+    tags: ["reasoning", "coding", "general"],
+    rank: 35,
+    cutoff: "2025",
+  },
+  {
+    id: "zen-hy3",
+    name: "HY3 (Zen)",
+    provider: "OpenCodeZen",
+    fmt: "openai",
+    url: "https://opencode.ai/zen/v1/chat/completions",
+    model: "hy3-free",
+    envKey: "",
+    tags: ["general", "coding", "reasoning"],
+    rank: 38,
+    cutoff: "2025",
+  },
 ];
 
 /** Cutoff se pehle ka koi bhi model "stale" hai — sirf fallback. */

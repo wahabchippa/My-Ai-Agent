@@ -241,8 +241,10 @@ async function runPipeline(
     // gir kar dono khaali laut aate the. Ab sab candidates reserve hote hain.
     const reserved: Entry[] = [];
     const plans = wave.map((spec) => {
-      // 3 candidates: free tiers itni aksar 429 dete hain ke 2 kaafi nahi.
-      const cands = pickModels(spec.tags, pool, [...usedModels, ...reserved], 3);
+      // 5 candidates. Free tier ka 429 ~100-300ms me wapas aata hai, to nakaam
+      // koshish ka kharcha na ke barabar hai — asal kharcha to kamyab call ka
+      // hai. Loop waqt khatam hone par rukta hai, ginti par nahi (neeche).
+      const cands = pickModels(spec.tags, pool, [...usedModels, ...reserved], 5);
       reserved.push(...cands);
       return { spec, cands };
     });
@@ -285,7 +287,13 @@ async function runPipeline(
             usedModels.push(model);
             break;
           }
-          // Retry sirf tab jab waqt bacha ho.
+          // Retry ki had WAQT hai, ginti nahi.
+          //
+          // Pehle 3 candidates ki fixed limit thi. Live par ye hua: teenon
+          // (Gemini, Gemini, OpenRouter) aik saath 429 de kar 1 SECOND me
+          // khatam ho gaye — jab ke 20 second budget bacha tha aur registry
+          // me OpenCodeZen ke tandurust keyless models mojood the. Agent
+          // khaali haath laut aaya jabke chalne wala model maujood tha.
           if (BUDGET_MS - (Date.now() - t0) - SYNTH_RESERVE_MS < 6_000) break;
         }
         return last!;
