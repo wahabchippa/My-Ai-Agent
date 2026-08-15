@@ -1,6 +1,8 @@
 // /api/chat/stream — SMART streaming. Groq Llama 70B PRIMARY (not a dumb race).
 // Only falls back to other models if Groq fails. Quality over speed.
 
+import { AIRFORCE_KEY } from "@/lib/keys";
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -119,8 +121,8 @@ ANSWER STYLE:
   const withTimeout = <T>(p: Promise<T>, ms: number) =>
     Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 
-  const groqKey = process.env.GROQ_API_KEY || "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";
-  const blKey = process.env.BAZAARLINK_API_KEY || "sk-bl-W9PbiGjmVyDNJRqMkdVYeLn1IInL03vJuDv6cXRjfM179mch";
+  const groqKey = process.env.GROQ_API_KEY || "";
+  const blKey = process.env.BAZAARLINK_API_KEY || "";
 
   // PRIMARY: Groq Llama 3.3 70B (smartest free model — 70B params)
   // Only fall back if Groq fails
@@ -155,7 +157,7 @@ ANSWER STYLE:
   // FALLBACK 3: AirForce Mistral Large
   try {
     const stream = await withTimeout(
-      streamOpenAI("https://api.airforce/v1/chat/completions", "mistral-large-latest", system, b.messages, "sk-air-Gl9Zm0KPVztbaQKrwmT8UBSADbmLHvOLKZgtYDWVbd64aSEF"),
+      streamOpenAI("https://api.airforce/v1/chat/completions", "mistral-large-latest", system, b.messages, AIRFORCE_KEY()),
       6000
     );
     return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });

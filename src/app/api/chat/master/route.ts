@@ -37,11 +37,11 @@ interface ModelConfig {
 }
 
 const MODELS: ModelConfig[] = [
-  { id: "groq-llama", name: "Llama 3.3 70B", url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile", key: process.env.GROQ_API_KEY || "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", tags: ["reasoning", "coding", "knowledge", "math", "creative", "general"] },
-  { id: "groq-gptoss", name: "GPT-OSS 120B", url: "https://api.groq.com/openai/v1/chat/completions", model: "openai/gpt-oss-120b", key: process.env.GROQ_API_KEY || "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", tags: ["reasoning", "knowledge", "math"] },
-  { id: "bl-deepseek", name: "DeepSeek V4", url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "sk-bl-W9PbiGjmVyDNJRqMkdVYeLn1IInL03vJuDv6cXRjfM179mch", tags: ["coding", "reasoning", "knowledge"] },
-  { id: "bl-qwen", name: "Qwen 3.7", url: "https://api.bazaarlink.ai/v1/chat/completions", model: "qwen/qwen3.7-flash:free", key: process.env.BAZAARLINK_API_KEY || "sk-bl-W9PbiGjmVyDNJRqMkdVYeLn1IInL03vJuDv6cXRjfM179mch", tags: ["coding", "knowledge", "creative"] },
-  { id: "af-mistral", name: "Mistral Large", url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "sk-air-Gl9Zm0KPVztbaQKrwmT8UBSADbmLHvOLKZgtYDWVbd64aSEF", tags: ["reasoning", "creative", "knowledge", "general"] },
+  { id: "groq-llama", name: "Llama 3.3 70B", url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile", key: process.env.GROQ_API_KEY || "", tags: ["reasoning", "coding", "knowledge", "math", "creative", "general"] },
+  { id: "groq-gptoss", name: "GPT-OSS 120B", url: "https://api.groq.com/openai/v1/chat/completions", model: "openai/gpt-oss-120b", key: process.env.GROQ_API_KEY || "", tags: ["reasoning", "knowledge", "math"] },
+  { id: "bl-deepseek", name: "DeepSeek V4", url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "", tags: ["coding", "reasoning", "knowledge"] },
+  { id: "bl-qwen", name: "Qwen 3.7", url: "https://api.bazaarlink.ai/v1/chat/completions", model: "qwen/qwen3.7-flash:free", key: process.env.BAZAARLINK_API_KEY || "", tags: ["coding", "knowledge", "creative"] },
+  { id: "af-mistral", name: "Mistral Large", url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "", tags: ["reasoning", "creative", "knowledge", "general"] },
   { id: "or-nemotron", name: "Nemotron 120B", url: "https://openrouter.ai/api/v1/chat/completions", model: "nvidia/nemotron-3-super-120b-a12b:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["reasoning", "knowledge"] },
   { id: "or-gemma", name: "Gemma 4 31B", url: "https://openrouter.ai/api/v1/chat/completions", model: "google/gemma-4-31b-it:free", key: process.env.OPENROUTER_API_KEY || "", tags: ["knowledge", "general", "fast"] },
   { id: "llm7-gemini", name: "Gemini Flash", url: "https://api.llm7.io/v1/chat/completions", model: "gemini-3.1-flash-lite", tags: ["fast", "general", "knowledge"] },
@@ -247,7 +247,7 @@ export async function POST(req: Request) {
   const now = new Date();
   const year = now.getUTCFullYear();
   const lastUser = [...b.messages].reverse().find((m: Msg) => m.role === "user")?.content || "";
-  const groqKey = process.env.GROQ_API_KEY || "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";
+  const groqKey = process.env.GROQ_API_KEY || "";
 
   const mode: Mode = (b.mode as Mode) || "balanced";
   // ─── ACCESS CONTROL: identify user, check plan, filter models ───
@@ -354,8 +354,8 @@ RULES:
   // Primary: Groq Llama 70B (fastest + smartest)
   const masterProviders = [
     { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile", key: groqKey },
-    { url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "sk-bl-W9PbiGjmVyDNJRqMkdVYeLn1IInL03vJuDv6cXRjfM179mch" },
-    { url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "sk-air-Gl9Zm0KPVztbaQKrwmT8UBSADbmLHvOLKZgtYDWVbd64aSEF" },
+    { url: "https://api.bazaarlink.ai/v1/chat/completions", model: "deepseek/deepseek-v4-flash:free", key: process.env.BAZAARLINK_API_KEY || "" },
+    { url: "https://api.airforce/v1/chat/completions", model: "mistral-large-latest", key: process.env.AIRFORCE_API_KEY || "" },
   ];
 
   for (const provider of masterProviders) {

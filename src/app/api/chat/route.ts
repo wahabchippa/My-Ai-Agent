@@ -1068,10 +1068,10 @@ export async function POST(req: Request) {
         cerKey:
           process.env.CEREBRAS_API_KEY ||
           "",
-        groqKey: process.env.GROQ_API_KEY || "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",
+        groqKey: process.env.GROQ_API_KEY || "",
         gemKey: process.env.GEMINI_API_KEY || "",
-        blKey: process.env.BAZAARLINK_API_KEY || "sk-bl-W9PbiGjmVyDNJRqMkdVYeLn1IInL03vJuDv6cXRjfM179mch",
-        afKey: process.env.AIRFORCE_API_KEY || "sk-air-Gl9Zm0KPVztbaQKrwmT8UBSADbmLHvOLKZgtYDWVbd64aSEF",
+        blKey: process.env.BAZAARLINK_API_KEY || "",
+        afKey: process.env.AIRFORCE_API_KEY || "",
         system: systemParts.join("\n\n"),
         messages: b.messages,
       });
