@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number; className?: string };
 
@@ -21,32 +21,33 @@ function base({ size = 20, className, ...props }: IconProps) {
 // NEXORA LOGO — Stylized N with neural network motif
 // ═══════════════════════════════════════════
 export function NexoraLogo({ size = 28, className = "" }: { size?: number; className?: string }) {
+  const gid = useId().replace(/:/g, ""); // unique gradient id per instance — fixes garbled/invisible logos
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className}>
       <defs>
-        <linearGradient id="nexora-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={`nexora-grad-${gid}`} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#00d4ff" />
           <stop offset="100%" stopColor="#8b5cf6" />
         </linearGradient>
       </defs>
       {/* Neural network background */}
-      <circle cx="8" cy="8" r="2" fill="url(#nexora-gradient)" opacity="0.3" />
-      <circle cx="24" cy="8" r="2" fill="url(#nexora-gradient)" opacity="0.3" />
-      <circle cx="8" cy="24" r="2" fill="url(#nexora-gradient)" opacity="0.3" />
-      <circle cx="24" cy="24" r="2" fill="url(#nexora-gradient)" opacity="0.3" />
-      <line x1="8" y1="8" x2="24" y2="24" stroke="url(#nexora-gradient)" strokeWidth="1" opacity="0.2" />
-      <line x1="24" y1="8" x2="8" y2="24" stroke="url(#nexora-gradient)" strokeWidth="1" opacity="0.2" />
+      <circle cx="8" cy="8" r="2" fill={`url(#nexora-grad-${gid})`} opacity="0.3" />
+      <circle cx="24" cy="8" r="2" fill={`url(#nexora-grad-${gid})`} opacity="0.3" />
+      <circle cx="8" cy="24" r="2" fill={`url(#nexora-grad-${gid})`} opacity="0.3" />
+      <circle cx="24" cy="24" r="2" fill={`url(#nexora-grad-${gid})`} opacity="0.3" />
+      <line x1="8" y1="8" x2="24" y2="24" stroke={`url(#nexora-grad-${gid})`} strokeWidth="1" opacity="0.2" />
+      <line x1="24" y1="8" x2="8" y2="24" stroke={`url(#nexora-grad-${gid})`} strokeWidth="1" opacity="0.2" />
       {/* Central N mark */}
       <path
         d="M10 24V8L16 16L22 8V24"
-        stroke="url(#nexora-gradient)"
+        stroke={`url(#nexora-grad-${gid})`}
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
       {/* Center node */}
-      <circle cx="16" cy="16" r="2.5" fill="url(#nexora-gradient)" />
+      <circle cx="16" cy="16" r="2.5" fill={`url(#nexora-grad-${gid})`} />
     </svg>
   );
 }
