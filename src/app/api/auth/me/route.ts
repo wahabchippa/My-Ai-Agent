@@ -1,29 +1,48 @@
-// /api/auth/me — return current logged-in user from session cookie.
-
+// GET /api/auth/me — get current authenticated user
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { users, sessions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { validateSession, getSessionTokenFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!db) return NextResponse.json({ user: null });
-  const token = req.headers.get("cookie")?.match(/nexora_session=([^;]+)/)?.[1];
-  if (!token) return NextResponse.json({ user: null });
-
-  const sess = await db
-    .select({ userId: sessions.userId })
-    .from(sessions)
-    .where(eq(sessions.token, token))
-    .limit(1);
-  if (!sess.length) return NextResponse.json({ user: null });
-
-  const user = await db
-    .select({ id: users.id, email: users.email, name: users.name })
-    .from(users)
-    .where(eq(users.id, sess[0].userId))
-    .limit(1);
-
-  return NextResponse.json({ user: user[0] || null });
+  try {
+    const token = getSessionTokenFromRequest(req);
+    
+    if (!token) {
+      return NextResponse.json({ user: null }, { status: 401 });
+    }
+    
+    const user = await validateSession(token);
+    
+    if (!user) {
+      const res = NextResponse.json({ user: null }, { status: 401 });
+      // Clear invalid cookie
+      res.cookies.set("nexora_session", "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 0,
+        path: "/",
+      });
+      return res;
+    }
+    
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        plan: user.plan,
+        status: user.status,
+        credits: user.credits,
+        emailVerified: user.emailVerified,
+        twoFactorEnabled: user.twoFactorEnabled,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  } catch (error) {
+    console.error("[AUTH] Me error:", error);
+    return NextResponse.json({ user: null }, { status: 500 });
+  }
 }

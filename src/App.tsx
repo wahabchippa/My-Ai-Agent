@@ -6,7 +6,7 @@ import { useAuth } from "./lib/useAuth";
 import { Navigation } from "./components/layout/Navigation";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";
-import { LoginScreen } from "./components/auth/LoginScreen";
+import { AuthScreen } from "./components/auth/AuthScreen";
 import { ChatInterface } from "./components/chat/ChatInterface";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { cn } from "./utils/cn";
@@ -55,7 +55,7 @@ function AppShell() {
 
   // Not logged in
   if (!user) {
-    return <LoginScreen />;
+    return <AuthScreen />;
   }
 
   return (

@@ -1,27 +1,71 @@
 import { pgTable, serial, text, timestamp, boolean, integer, jsonb, numeric, pgEnum } from "drizzle-orm/pg-core";
 
 // ═══════════════════════════════════════════
-// USERS — extended with role, plan, status
+// USERS — full auth support
 // ═══════════════════════════════════════════
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   name: text("name"),
+  passwordHash: text("password_hash"), // null for OAuth-only users
   role: text("role").default("user").notNull(), // user | admin | super_admin
   plan: text("plan").default("free").notNull(), // free | pro | premium | admin
-  status: text("status").default("active").notNull(), // active | suspended | deleted
+  status: text("status").default("active").notNull(), // active | suspended | deleted | pending_verification
   credits: integer("credits").default(100).notNull(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  emailVerifyToken: text("email_verify_token"),
+  emailVerifyExpires: timestamp("email_verify_expires"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
+  twoFactorSecret: text("two_factor_secret"),
+  failedLoginAttempts: integer("failed_login_attempts").default(0).notNull(),
+  lockedUntil: timestamp("locked_until"),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastActive: timestamp("last_active"),
+  deletedAt: timestamp("deleted_at"),
 });
 
 // ═══════════════════════════════════════════
-// SESSIONS
+// SESSIONS — enhanced with device tracking
 // ═══════════════════════════════════════════
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),
   token: text("token").notNull().unique(),
   userId: integer("user_id").notNull().references(() => users.id),
+  deviceInfo: text("device_info"), // User-Agent string
+  ipAddress: text("ip_address"),
+  location: text("location"), // City, Country (approximate)
+  rememberMe: boolean("remember_me").default(false).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  lastActiveAt: timestamp("last_active_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ═══════════════════════════════════════════
+// OAUTH ACCOUNTS — social login providers
+// ═══════════════════════════════════════════
+export const oauthAccounts = pgTable("oauth_accounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  provider: text("provider").notNull(), // google | github
+  providerAccountId: text("provider_account_id").notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpires: timestamp("token_expires"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ═══════════════════════════════════════════
+// LOGIN ATTEMPTS — rate limiting & security
+// ═══════════════════════════════════════════
+export const loginAttempts = pgTable("login_attempts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address"),
+  success: boolean("success").default(false).notNull(),
+  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

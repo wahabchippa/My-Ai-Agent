@@ -1,40 +1,136 @@
-// /api/auth/login — simple email login (no OTP). Finds or creates user, sets session cookie.
-
+// POST /api/auth/login — email/password login
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { users, sessions } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { randomBytes } from "crypto";
+import {
+  findUserByEmail,
+  verifyPassword,
+  createSession,
+  checkRateLimit,
+  logLoginAttempt,
+  checkAccountLocked,
+  incrementFailedAttempts,
+  resetFailedAttempts,
+  getClientInfo,
+} from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const { email } = await req.json().catch(() => ({}));
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return NextResponse.json({ error: "Valid email required" }, { status: 400 });
-  if (!db) return NextResponse.json({ error: "Database not configured" }, { status: 500 });
-
-  // Find or create user
-  let userRows = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!userRows.length) {
-    await db.insert(users).values({ email, name: email.split("@")[0] });
-    userRows = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  try {
+    const { ip, userAgent } = getClientInfo(req);
+    
+    // Rate limiting
+    const rateCheck = await checkRateLimit("login", ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rateCheck.retryAfter) } }
+      );
+    }
+    
+    const body = await req.json().catch(() => ({}));
+    const { email, password, rememberMe } = body;
+    
+    // Validation
+    if (!email || typeof email !== "string") {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+    
+    if (!password || typeof password !== "string") {
+      return NextResponse.json({ error: "Password is required" }, { status: 400 });
+    }
+    
+    // Find user
+    const user = await findUserByEmail(email);
+    
+    // Generic error to prevent email enumeration
+    const invalidCredentials = { error: "Invalid email or password" };
+    
+    if (!user) {
+      await logLoginAttempt(email, ip, userAgent, false);
+      return NextResponse.json(invalidCredentials, { status: 401 });
+    }
+    
+    // Check if account is locked
+    const lockCheck = await checkAccountLocked(user.id);
+    if (lockCheck.locked) {
+      await logLoginAttempt(email, ip, userAgent, false);
+      return NextResponse.json(
+        { error: `Account temporarily locked. Try again after ${lockCheck.until?.toLocaleTimeString()}` },
+        { status: 403 }
+      );
+    }
+    
+    // Check if user has password (might be OAuth-only)
+    if (!user.passwordHash) {
+      await logLoginAttempt(email, ip, userAgent, false);
+      return NextResponse.json(
+        { error: "Please sign in with Google or GitHub" },
+        { status: 400 }
+      );
+    }
+    
+    // Verify password
+    const validPassword = await verifyPassword(password, user.passwordHash);
+    if (!validPassword) {
+      await logLoginAttempt(email, ip, userAgent, false);
+      const locked = await incrementFailedAttempts(user.id);
+      if (locked) {
+        return NextResponse.json(
+          { error: "Too many failed attempts. Account temporarily locked." },
+          { status: 403 }
+        );
+      }
+      return NextResponse.json(invalidCredentials, { status: 401 });
+    }
+    
+    // Check account status
+    if (user.status === "suspended") {
+      return NextResponse.json({ error: "Account suspended. Contact support." }, { status: 403 });
+    }
+    
+    if (user.status === "deleted") {
+      return NextResponse.json(invalidCredentials, { status: 401 });
+    }
+    
+    // Reset failed attempts
+    await resetFailedAttempts(user.id);
+    
+    // Log successful login
+    await logLoginAttempt(email, ip, userAgent, true);
+    
+    // Create session
+    const token = await createSession(user.id, {
+      rememberMe: !!rememberMe,
+      deviceInfo: userAgent,
+      ipAddress: ip,
+    });
+    
+    // Set cookie
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60;
+    const res = NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        plan: user.plan,
+        emailVerified: user.emailVerified,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+    
+    res.cookies.set("nexora_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge,
+      path: "/",
+    });
+    
+    return res;
+  } catch (error) {
+    console.error("[AUTH] Login error:", error);
+    return NextResponse.json({ error: "An error occurred. Please try again." }, { status: 500 });
   }
-  const user = userRows[0];
-
-  // Create session
-  const token = randomBytes(32).toString("hex");
-  await db.insert(sessions).values({ token, userId: user.id });
-
-  const ADMIN_EMAILS = ["wahab.chippa@joinfleek.com", "wahabchippa@joinfleek.com"];
-  const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
-  const res = NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, isAdmin } });
-  res.cookies.set("nexora_session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    path: "/",
-  });
-  return res;
 }
