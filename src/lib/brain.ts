@@ -1,5 +1,4 @@
 import type { ModelId } from "./models";
-import { buildAnything } from "./builder";
 import { lookup } from "./knowledge";
 import {
   detectLang,
@@ -454,11 +453,18 @@ export function generateReply(opts: {
   if (math) {
     text = math;
   }
-  // 2. build apps/websites
+  // 2. build apps/websites — ab Builder tab par bhejo.
+  //
+  // Pehle yahan buildAnything() chalta tha: keyword templates, koi AI
+  // nahi. Har "website banao" par WOHI ek website aati thi, sirf naam
+  // badal kar (website(extractTopic(prompt))). User ne khud pakra:
+  // "1 hi website dikhata text change karke". Jhoota jawab dene se
+  // behtar hai user ko wahan bhejna jahan asal cheez banti hai.
   else if (BUILD_VERB.test(prompt) && !CODE_LANG.test(m)) {
-    const app = buildAnything(prompt);
-    autoArtifact = true;
-    text = buildIntro(lang) + "\n\n```html\n" + app.html + "\n```\n\n> Tip: open the **Code** tab in the panel to see how it's built.";
+    text =
+      lang === "ur"
+        ? "Poora project banane ke liye **Builder** tab kholein — wahan asal AI aap ki app ki saari files banata hai (HTML, CSS, JS, README), live preview deta hai, aur ZIP me download bhi. Us ke baad wahin chat se badal bhi sakte hain: \"button green karo\", \"dark mode add karo\".\n\nYa yahin chat me poochein aur main code likh doon."
+        : "Open the **Builder** tab to generate a full project — real AI writes every file (HTML, CSS, JS, README), previews it live, and exports a ZIP. You can then change it by chatting: \"make the buttons green\", \"add dark mode\".\n\nOr ask me here and I will write the code inline.";
   }
   // 3. summarize pasted text
   else if (/\b(summari[sz]e|summari[sz]e this|tldr|tl;dr|key points|main points|shorten this|bullet points of)\b/.test(m)) {

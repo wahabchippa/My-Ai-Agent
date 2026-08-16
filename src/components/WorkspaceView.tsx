@@ -82,6 +82,10 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [tab, setTab] = useState<"code" | "preview">("code");
   const [copied, setCopied] = useState(false);
+  // Workspace ka chat: project ban jane ke baad usay badalne ke liye.
+  // Pehle project ban kar pathar par likha ho jata tha — badalna ho to
+  // poora dobara banwao. Ab "button green karo" kehna kaafi hai.
+  const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; changed?: string[] }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const startRef = useRef(0);
 
@@ -138,11 +142,47 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
         return;
       }
       setProject(d as Project);
+      setChat([]);
       setActivePath(d.files[0]?.path ?? "");
       setTab(d.files.some((f: ProjectFile) => /\.html?$/i.test(f.path)) ? "preview" : "code");
       setPrompt("");
     } catch (e) {
       if ((e as Error).name !== "AbortError") setError((e as Error).message || "Network error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Chat se project badlo — sirf mutasira files dobara likhi jati hain. */
+  const sendEdit = async (text: string) => {
+    const t = text.trim();
+    if (!t || !project || busy) return;
+    setChat((c) => [...c, { role: "user", text: t }]);
+    setPrompt("");
+    setError("");
+    setBusy(true);
+    startRef.current = Date.now();
+    setElapsed(0);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const res = await fetch("/api/build/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: t, files: project.files }),
+        signal: ac.signal,
+      });
+      const d = await res.json();
+      if (d.files?.length) {
+        setProject({ ...project, files: d.files, built: d.files.length, total: d.files.length });
+        // Jo file abhi badli hai wohi khol do — user ko farq foran dikhe.
+        if (d.changed?.length) setActivePath(d.changed[0]);
+      }
+      setChat((c) => [...c, { role: "ai", text: d.reply || (d.ok ? "Ho gaya." : "Nahi ho saka."), changed: d.changed ?? [] }]);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        setChat((c) => [...c, { role: "ai", text: "Network masla — dobara koshish karein." }]);
+      }
     } finally {
       setBusy(false);
     }
@@ -198,16 +238,16 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                generate();
+                project ? sendEdit(prompt) : generate();
               }
             }}
             rows={1}
             disabled={busy}
-            placeholder="Build an expense tracker with charts…"
+            placeholder={project ? "Ab kya badalna hai? e.g. dark mode add karo…" : "Build an expense tracker with charts…"}
             className="max-h-28 min-h-[24px] flex-1 resize-none bg-transparent text-[14px] text-ink placeholder:text-muted focus:outline-none disabled:opacity-50 dark:text-cream"
           />
           <button
-            onClick={busy ? () => abortRef.current?.abort() : generate}
+            onClick={busy ? () => abortRef.current?.abort() : project ? () => sendEdit(prompt) : generate}
             disabled={!busy && !prompt.trim()}
             className={cn(
               "flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition",
@@ -293,6 +333,52 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
               </button>
             )}
           </div>
+
+          {/* chat — project ke sath baat karo */}
+          {chat.length > 0 && (
+            <div className="flex w-64 shrink-0 flex-col border-r border-line dark:border-night-surface">
+              <div className="border-b border-line px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted dark:border-night-surface">
+                Changes
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+                {chat.map((m, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] leading-relaxed",
+                      m.role === "user"
+                        ? "bg-coral-soft text-coral-hover dark:bg-coral/15"
+                        : "bg-cream-deep/60 text-ink-soft dark:bg-night-surface/50 dark:text-cream/75",
+                    )}
+                  >
+                    {m.text}
+                    {!!m.changed?.length && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {m.changed.map((f) => (
+                          <button
+                            key={f}
+                            onClick={() => {
+                              setActivePath(f);
+                              setTab("code");
+                            }}
+                            className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-600 dark:text-emerald-400"
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {busy && (
+                  <div className="flex items-center gap-1.5 px-2 text-[11px] text-muted">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
+                    working… {elapsed}s
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* editor / preview */}
           <div className="flex min-w-0 flex-1 flex-col">

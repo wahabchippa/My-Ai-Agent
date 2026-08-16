@@ -30,8 +30,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "chat", label: "Chat", icon: ChatIcon },
-  { id: "projects", label: "Projects", icon: FolderIcon },
-  { id: "workspace", label: "Workspace", icon: CodeIcon },
+  { id: "workspace", label: "Builder", icon: CodeIcon },
   { id: "settings", label: "Settings", icon: SettingsIcon },
   { id: "admin", label: "Admin", icon: ShieldIcon, adminOnly: true },
 ];
@@ -179,7 +178,7 @@ export function Sidebar({ view, isOpen, onToggle, onViewChange, isAdmin, theme, 
         </>
       ) : (
         <div className="flex-1 flex items-center justify-center text-sm text-text-muted">
-          {view === "projects" ? "Projects" : view === "workspace" ? "Coding Workspace" : view === "settings" ? "Settings" : view === "admin" ? "Admin" : ""}
+          {view === "workspace" ? "Project Builder" : view === "settings" ? "Settings" : view === "admin" ? "Admin" : ""}
         </div>
       )}
 
