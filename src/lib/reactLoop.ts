@@ -55,6 +55,8 @@ export interface LoopOpts {
   history?: { role: "user" | "assistant"; content: string }[];
   /** har qadam par UI ko batao */
   onStep?: (s: Step) => void;
+  /** aakhri jawab ke liye mutabadil models — asal model thak chuka ho to */
+  fallbacks?: Entry[];
 }
 
 function systemFor(base: string): string {
@@ -179,20 +181,42 @@ export async function runReactLoop(
       .map((s) => `[${s.tool}] ${s.input}\n${s.output}`)
       .join("\n\n---\n\n");
 
-    const left = budget - (Date.now() - t0);
-    if (left > 5_000) {
+    // Sirf usi model par fallback karna bekaar hai: agar wo 429/timeout
+    // de raha hai to doosri baar bhi wohi dega. Production par bilkul ye
+    // hua — fallback fail hui aur raw ACTION user tak pohanch gaya.
+    // Ab mutabadil models bhi try hote hain.
+    for (const fm of [model, ...(opts.fallbacks ?? [])]) {
+      const left = budget - (Date.now() - t0);
+      if (left < 5_000) break;
       const r = await callModel(
-        model,
+        fm,
         `${baseSystem}\n\nAnswer the user directly and completely. Do not mention tools, actions, or how you got the information. Just answer.`,
         [
           { role: "user", content: gathered ? `${task}\n\n──── INFORMATION GATHERED ────\n${gathered}` : task },
         ],
         { timeoutMs: Math.min(callMs, left), temperature: opts.temperature ?? 0.3 },
       );
-      if (r.ok && r.text.trim()) final = stripFinal(r.text);
+      if (r.ok && r.text.trim()) {
+        final = stripFinal(r.text);
+        break;
+      }
     }
-    // Ab bhi kuch nahi to model ka aakhri text hi sahi — khaali se behtar.
-    if (!final && lastText) final = stripFinal(lastText);
+    // Ab bhi kuch nahi to model ka aakhri text — MAGAR sirf tab jab wo
+    // asal jawab ho. Production par ye bug pakra: fallback call fail hui
+    // aur user ko raw `THOUGHT: … ACTION: {"tool":…}` dikh gaya, jabke
+    // tool ne sahi jawab (422789337) diya hua tha. Protocol ka malba
+    // user ko dikhana khaali jawab se bhi bura hai.
+    if (!final && lastText && !parseAction(lastText) && !/^\s*(THOUGHT|ACTION)\s*:/im.test(lastText)) {
+      final = stripFinal(lastText);
+    }
+    // Aakhri sahara: tools ne jo asal natija diya wohi saaf kar ke dikha
+    // do. Model ke bina bhi ye jawab se behtar hai — kam se kam sach hai.
+    if (!final && steps.some((x) => x.ok)) {
+      final = steps
+        .filter((x) => x.ok)
+        .map((x) => `**${x.tool}** — \`${x.input}\`\n\n${x.output}`)
+        .join("\n\n");
+    }
   }
 
   return {

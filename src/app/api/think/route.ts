@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
         maxSteps,
         budgetMs: BUDGET_MS - (Date.now() - t0),
         history,
+        fallbacks: chain.filter((x) => x.id !== m.id),
       });
       if (r.final.trim()) break; // kaam ho gaya
     }
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
             maxSteps,
             budgetMs: BUDGET_MS - (Date.now() - t0),
             history,
+            fallbacks: chain.filter((x) => x.id !== m.id),
             onStep: (s: Step) => emit({ type: "step", step: s }),
           });
           if (r.final.trim()) break;
