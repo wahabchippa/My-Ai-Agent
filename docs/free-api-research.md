@@ -191,3 +191,75 @@ url:    https://api.z.ai/api/paas/v4/chat/completions
 auth:   Authorization: Bearer <ZAI_API_KEY>
 fmt:    openai
 ```
+
+---
+
+# Round 3: GitHub topic search (16 Aug 2026)
+
+User ne 6 search queries dein: `topic:ai-api`, `topic:llm-api`,
+`topic:openai-api`, `awesome ai api`, `llm gateway`, `ai model api`.
+
+GitHub search API se chalayin. **Natija: koi naya usable provider nahi mila.**
+
+## Search se kya aaya
+
+Zyada tar nateeje teen qism ke the, teenon hamare kaam ke nahi:
+
+| Qism | Misalein | Kyun bekaar |
+|---|---|---|
+| **Self-hosted gateways** | LiteLLM (56k⭐), one-api (36k⭐), new-api (45k⭐), Portkey (12k⭐) | Ye *routing* karte hain — khud koi free model nahi dete. Aap ki apni keys chahiye |
+| **Client libraries / SDKs** | langchain4j, multi-llm-ts, bellman | Code libraries, provider nahi |
+| **Apps / demos** | LibreChat, private-gpt, chatgpt-demo | Products, API list nahi |
+
+Char asli "free API list" repos mile:
+`mnfst/awesome-free-llm-apis` (6.6k⭐), `open-free-llm-api/awesome-freellm-apis`
+(1.8k⭐), `pacocartones/free-llm-api-hub`, `for-the-zero/Free-LLM-Collection`.
+
+## Sab se acha: `pacocartones/free-llm-api-hub`
+
+Ye ab tak dekhi hui behtareen list hai — blog post nahi, **maintained dataset**
+hai: `data/providers.json` (69 providers, JSON schema ke sath validate hota
+hai, README us se generate hota hai). Har entry me `card_required`,
+`phone_required`, `openai_base_url`, `env_key`, `last_verified` structured
+fields hain. Version 2.9.0, generated 2026-08-14.
+
+Filter lagaya — text modality + `ongoing` (trial nahi) + no card +
+OpenAI-compatible + jo Nexora me pehle se nahi:
+
+**45 text providers → 15 qualify → 6 naye:**
+Arli AI · ModelScope · Ollama Cloud · SiliconFlow (📱phone) · Typhoon (SCB 10X)
+· W&B Inference
+
+## Sab probe kiye — 6/6 key maangte hain
+
+```
+ArliAI       401  Authorization header missing or invalid
+ModelScope   401  valid ModelScope token required
+OllamaCloud  401  Unauthorized
+SiliconFlow  401  Token is invalid
+Typhoon      403  Unauthorized
+WandB        401  Missing bearer authentication
+```
+
+Baqi 3 lists se bhi jo naye base URLs nikle, wo bhi probe kiye:
+
+```
+g4f.space    402  "No cake credits" — proof-of-work maangta hai
+chutes.ai    429  hard rate limit (2 dafa retry par bhi)
+nscale       401 · nebius 401 · dxnt 401 · aionlabs 401 · glhf 522
+```
+
+## Faisla: kuch add nahi kiya
+
+Har naya provider sign-up maangta hai. Nexora ka asal masla **naye providers
+ki kami nahi** — masla ye hai ke Groq aur Gemini par sara bojh hai aur wo 429
+dete hain. Wo sirf ek aur *working key* se hal hoga, aur list me se koi bhi
+key mufta nahi milti.
+
+**OpenCode Zen (round 2 se) ab bhi ek-lauta keyless provider hai jo asal me
+kaam karta hai.** Us ki qadar is round ke baad aur barh gayi: 4 lists,
+100+ providers chhane, aur us jaisa doosra koi nahi mila.
+
+Agar aap sign-up karne par razi hon to `providers.json` me sab se behtar
+option **W&B Inference** hai ($100/month free credit, Llama 3.3 70B +
+DeepSeek V4 Flash) — us ke baad ModelScope (~2,000 calls/day).
