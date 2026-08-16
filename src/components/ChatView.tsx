@@ -97,6 +97,9 @@ export function ChatView({
     model,
     setModel,
     setConversationModel,
+    mode: defaultMode,
+    setMode: setDefaultMode,
+    setConversationMode,
     newChat,
     addMessage,
     patchMessage,
@@ -110,7 +113,21 @@ export function ChatView({
   const [localStream, setLocalStream] = useState(false);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [web, setWeb] = useState(false);
-  const [mode, setMode] = useState<"fast" | "balanced" | "deep" | "agents">("balanced");
+  // Mode ab component ke andar useState NAHI hai.
+  //
+  // Pehle wo tha, aur bug yehi tha: tab badlo ya refresh karo to
+  // component remount hota aur mode chup chaap "balanced" par wapas
+  // chala jata. User ne bilkul theek kaha — "1 command ke baad woh apni
+  // marzi se change karleta hey".
+  //
+  // Ab do jagah: har chat ka apna mode (conversation.mode), aur naye
+  // chats ke liye default (store.mode). Dono localStorage + Neon me
+  // mehfooz hain, is liye kabhi khud nahi badalta.
+  const mode = active?.mode ?? defaultMode;
+  const setMode = (m: "fast" | "balanced" | "deep" | "agents") => {
+    setDefaultMode(m);                                   // agla naya chat
+    if (activeId) setConversationMode(activeId, m);      // ye wala chat
+  };
   // Deep/Agents chalte waqt live qadam — user ko dikhe ke kaam ho raha hai.
   const [liveSteps, setLiveSteps] = useState<string[]>([]);
   const [showAgents, setShowAgents] = useState(false);

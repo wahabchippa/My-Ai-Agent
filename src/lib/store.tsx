@@ -32,6 +32,8 @@ export interface Conversation {
   title: string;
   messages: Message[];
   model: ModelId;
+  /** is chat ka apna mode — har chat apni tarah chal sakti hai */
+  mode?: ChatMode;
   createdAt: number;
   updatedAt: number;
   starred?: boolean;
@@ -39,17 +41,27 @@ export interface Conversation {
 
 export type Theme = "light" | "dark";
 
+/** Chat ka jawab dene ka tareeqa. Ye pehle sirf ChatView ke andar
+ *  useState tha — is liye tab badalte hi ya refresh par "balanced" par
+ *  wapas chala jata tha. User ne theek kaha: "1 command ke baad woh apni
+ *  marzi se change karleta hey". Ab ye mehfooz hota hai. */
+export type ChatMode = "fast" | "balanced" | "deep" | "agents";
+
 interface StoreShape {
   conversations: Conversation[];
   activeId: string | null;
   active: Conversation | null;
   model: ModelId;
+  /** default mode naye chats ke liye */
+  mode: ChatMode;
   theme: Theme;
   personality: PersonalityId;
   apiKeys: ApiKeys;
   activeSlot: string | null;
   mediaKey: string;
   setMediaKey: (k: string) => void;
+  setMode: (m: ChatMode) => void;
+  setConversationMode: (id: string, m: ChatMode) => void;
   setModel: (m: ModelId) => void;
   setPersonality: (p: PersonalityId) => void;
   setSlot: (slot: KeySlot) => void;
@@ -121,6 +133,7 @@ function seedConversations(): Conversation[] {
 interface Persisted {
   conversations: Conversation[];
   model: ModelId;
+  mode?: ChatMode;
   theme: Theme;
   personality: PersonalityId;
   apiKeys: ApiKeys;
@@ -183,6 +196,7 @@ function load(userId: number | null): Persisted {
         }
         return {
           conversations: parsed.conversations,
+          mode: (parsed.mode as ChatMode) ?? "balanced",
           model: parsed.model ?? "sonnet",
           // Force the clean light theme; ignore any stale saved "dark".
           theme: "light",
@@ -232,6 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [model, setModelState] = useState<ModelId>(data.model);
+  const [mode, setModeState] = useState<ChatMode>(data.mode ?? "balanced");
   const [theme, setTheme] = useState<Theme>(data.theme);
   const [personality, setPersonality] = useState<PersonalityId>(data.personality);
   const [apiKeys, setApiKeys] = useState<ApiKeys>(data.apiKeys);
@@ -312,6 +327,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   function applyState(st: Persisted) {
     setConversations(st.conversations);
     setModelState(st.model);
+    setModeState(st.mode ?? "balanced");
     setTheme(st.theme);
     setPersonalityState(st.personality);
     setApiKeys(st.apiKeys);
@@ -325,7 +341,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // par chal jayegi.
     if (!hydrated) return;
 
-    const payload: Persisted = { conversations, model, theme, personality, apiKeys, activeSlot, mediaKey };
+    const payload: Persisted = { conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey };
 
     // localStorage — is user ki apni key par
     try {
@@ -347,7 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     }, 2000);
     return () => clearTimeout(t);
-  }, [hydrated, userId, conversations, model, theme, personality, apiKeys, activeSlot, mediaKey]);
+  }, [hydrated, userId, conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey]);
 
   // apply theme class to <html>
   useEffect(() => {
@@ -363,6 +379,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const setModel = useCallback((m: ModelId) => setModelState(m), []);
+  const setMode = useCallback((m: ChatMode) => setModeState(m), []);
+  const setConversationMode = useCallback((id: string, m: ChatMode) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, mode: m, updatedAt: Date.now() } : c)),
+    );
+  }, []);
   const setPersonalityState = useCallback(
     (p: PersonalityId) => setPersonality(p),
     []
@@ -396,6 +418,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       title: "New chat",
       messages: [],
       model: m ?? model,
+      mode,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -483,6 +506,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     activeId,
     active,
     model,
+    mode,
+    setMode,
+    setConversationMode,
     theme,
     personality,
     apiKeys,
