@@ -17,6 +17,32 @@
 
 import { available, isStale, type Entry } from "@/lib/modelRegistry";
 import { buildSystem, callModel, type Msg } from "@/lib/aiCall";
+
+// Har specialist ka naam — leak detection ke liye.
+// Module scope par is liye ke looksLikeThinking() ab agent loop AUR
+// synthesis dono use karte hain. (Pehle ye runPipeline ke andar tha.)
+const AGENT_NAMES = SPECIALISTS.map((x) => x.name);
+
+/**
+ * Kya ye output jawab hai ya model ki apni bakbak?
+ *
+ * Pehle ye sirf SYNTHESIS par lagta tha. Magar jab sirf ek agent kaamyab
+ * ho (ya synthesis ke liye waqt na bache) to stitched() raw output seedha
+ * user ko de deta tha — leak ke sath. Ab har agent ka output bhi guzarta hai.
+ */
+function looksLikeThinking(t: string): string | null {
+  const head = t.slice(0, 1200);
+  if (/\b(?:thinking process|thought process|self-correction|let me think|i need to|i'll (?:start|structure|draft)|analyze user input)\b/i.test(head))
+    return "internal monologue";
+  if (/\*\*Team Output:?\*\*|\bteam output\b/i.test(t)) return "team-output meta";
+  // numbered plan jo "1. **Analyze" jaisa shuru ho — ye sochne ka dhancha hai
+  if (/^\s*\d+\.\s+\*\*(?:Analyze|Understand|Identify|Plan|Consider|Determine)\b/im.test(head))
+    return "planning scaffold";
+  const named = AGENT_NAMES.filter((n) => new RegExp(`\\b${n}\\b`).test(t));
+  if (named.length) return `agent naam leak (${named.join(", ")})`;
+  return null;
+}
+
 import { research, needsResearch } from "@/lib/research";
 import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { sanitizeMessages } from "@/lib/sanitize";
@@ -157,7 +183,15 @@ type Ev =
  * Isi liye dono modes bilkul aik hi code chalate hain (koi drift nahi).
  */
 async function runPipeline(
-  b: { task?: string; message?: string; team?: SpecialistId[] } | null,
+  b: {
+    task?: string;
+    message?: string;
+    team?: SpecialistId[];
+    /** Pichli guftagu. Pehle ye parse to hoti thi magar CHUP CHAAP
+     *  phenk di jati thi — is liye agent har turn ko pehla turn samajhta
+     *  tha aur follow-up ("ab ise Python me karo") ka matlab kho jata tha. */
+    messages?: { role: string; content: string }[];
+  } | null,
   emit: (e: Ev) => void,
   /** non-streaming mode ka poora JSON yahan rakha jata hai (per-call, taake
    *  do requests aik doosre ka data na churayein). */
@@ -165,14 +199,36 @@ async function runPipeline(
 ): Promise<Ev> {
   const t0 = Date.now();
 
-  const rawTask: string = b?.task || b?.message || "";
+  // messages[] aaye to aakhri user message hi asal task hai.
+  const history = Array.isArray(b?.messages) ? b!.messages : [];
+  const lastUserMsg = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
+  const rawTask: string = b?.task || b?.message || lastUserMsg;
   if (!rawTask.trim()) {
     return { type: "error", error: "missing-task", message: "Missing 'task'", status: 400 };
   }
 
   // Secrets/PII hatao — ye text kai providers ko jayega.
-  const cleaned = sanitizeMessages([{ role: "user", content: rawTask }], { aggressive: false });
+  // History bhi sanitize hoti hai; wo bhi model ko jati hai.
+  const priorTurns = history.filter((m) => m.content !== rawTask).slice(-6);
+  const cleaned = sanitizeMessages(
+    [{ role: "user", content: rawTask }, ...priorTurns.map((m) => ({ role: "user" as const, content: m.content }))],
+    { aggressive: false },
+  );
   const task = cleaned.messages[0].content;
+
+  // Pichli guftagu ka khulasa jo har specialist ke prompt me jayega.
+  const convoBlock =
+    priorTurns.length > 0
+      ? `\n\n════════ PREVIOUS CONVERSATION ════════\n` +
+        cleaned.messages
+          .slice(1)
+          .map((m, i) => `${priorTurns[i].role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 700)}`)
+          .join("\n") +
+        `\n════════ END CONVERSATION ════════\n` +
+        `The user's new request continues this conversation. Resolve any ` +
+        `references to earlier turns ("it", "that code", "same thing but in X") ` +
+        `against the history above, and keep the same language they used.`
+      : "";
 
   const pool = available();
   // Keyless models (OpenCode Zen) bhi ginti me hain — bina kisi key ke bhi
@@ -296,6 +352,7 @@ async function runPipeline(
               stale: isStale(model),
               cutoff: model.cutoff,
             }) +
+            convoBlock +
             `\n\n════════ YOUR ROLE: ${spec.role.toUpperCase()} ════════\n${spec.system}`;
 
           const r = await callModel(model, system, [{ role: "user", content: userMsg }] as Msg[], {
@@ -304,10 +361,18 @@ async function runPipeline(
             useGrounding: !!spec.needsResearch,
           });
 
+          // Agent ne jawab ke bajaye apni bakbak bheji? Agla model try karo.
+          // Ye check pehle sirf synthesis par tha — magar jab ek hi agent
+          // kaamyab ho to stitched() us raw output ko seedha user tak
+          // pahuncha deta tha.
+          const agentLeak = r.ok && r.text.trim() ? looksLikeThinking(r.text) : null;
+
           last = {
             id: spec.id, name: spec.name, role: spec.role, emoji: spec.emoji, color: spec.color,
             model: r.model, provider: r.provider, output: r.text,
-            ok: r.ok && !!r.text.trim(), error: r.error, ms: r.ms,
+            ok: r.ok && !!r.text.trim() && !agentLeak,
+            error: agentLeak ? `rad — ${agentLeak}` : r.error,
+            ms: r.ms,
           };
 
           if (last.ok) {
@@ -381,16 +446,6 @@ async function runPipeline(
    * to synthesis rad, aur stitched per-agent output dikhaya jata hai (jo
    * saaf-suthra hai aur har agent ka kaam poora rakhta hai).
    */
-  const AGENT_NAMES = SPECIALISTS.map((x) => x.name);
-  const looksLikeThinking = (t: string): string | null => {
-    const head = t.slice(0, 1200);
-    if (/\b(?:thinking process|thought process|self-correction|let me think|i need to|i'll (?:start|structure|draft))\b/i.test(head))
-      return "internal monologue";
-    if (/\*\*Team Output:?\*\*|\bteam output\b/i.test(t)) return "team-output meta";
-    const named = AGENT_NAMES.filter((n) => new RegExp(`\\b${n}\\b`).test(t));
-    if (named.length) return `agent naam leak (${named.join(", ")})`;
-    return null;
-  };
 
   if (okStages.length > 1) {
     emit({ type: "synthesis:start" });
@@ -401,6 +456,7 @@ async function runPipeline(
       if (Date.now() - t0 > BUDGET_MS - 8_000) break;
       const synthSystem =
         buildSystem({ research: researchData }) +
+        convoBlock +
         `\n\n════════ SYNTHESIS ════════
 A team of specialists worked on this task in sequence. Merge their work into
 ONE polished deliverable for the user.
