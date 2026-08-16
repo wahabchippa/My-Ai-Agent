@@ -127,3 +127,67 @@ keyless hai — yahan dobara filter karne ki zaroorat hi nahi thi.
 Fix ke baad verify kiya: **zero keys par bhi app chalti hai** (5 models
 available, Zen ne 885ms me jawab diya), aur research task me Logos asal me
 Zen par chala.
+
+---
+
+# Z.ai (Zhipu) — test kiya, **add NAHI kiya** (16 Aug 2026)
+
+User ne key di. Key **valid hai** (models list aa gayi), magar natija kaam ka
+nahi nikla.
+
+## Kya mila
+
+`https://api.z.ai/api/paas/v4` — 9 models list hote hain:
+`glm-4.5, glm-4.5-air, glm-4.6, glm-4.7, glm-5, glm-5-turbo, glm-5.1,
+glm-5.2, glm-5.3`
+
+**Sab 9 par yehi error:**
+```
+[1113] Insufficient balance or no resource package. Please recharge.
+```
+
+Teen endpoints try kiye — `/api/paas/v4`, `/api/coding/paas/v4`, aur
+Anthropic-style `/api/anthropic/v1/messages` — teenon par wohi 1113.
+
+## Sirf ek model free chala: `glm-4.5-flash`
+
+Ye list me nahi tha, naam se guess kar ke mila. Chalta hai, magar:
+
+| Test | Natija |
+|---|---|
+| Reliability | ✅ **5/5 pass** |
+| "OK" kehne ka waqt | ❌ **9.5 – 14.1 sekind** |
+| Asal code review | ❌ **54.2 sekind** |
+| Knowledge cutoff | ❌ **"Joe Biden is president"** → 2023 |
+| Zaya hui reasoning | 4004ch soch vs 2233ch asal jawab |
+
+## Faisla: add nahi kiya
+
+Teen wajuhat, har ek akeli kaafi hai:
+
+1. **54s > poora budget.** Hamara per-agent timeout 20s hai aur total budget
+   52s (Vercel 60s limit ki wajah se). Ye model akela poora budget kha jata
+   hai — pipeline me kabhi mukammal hi nahi hoga.
+
+2. **Cutoff 2023** → `isStale()` true → score me +1000 → ye Pollinations aur
+   LLM7 ke saath sab se aakhri darje me chala jata, jahan se shazo-nadir hi
+   koi model uthta hai.
+
+3. **Jo pehle se hai wo behtar hai.** OpenCode Zen keyless hai, cutoff 2025,
+   aur 0.8–2.6s me jawab deta hai. Z.ai us se har pehlu me peeche hai —
+   aur us ke liye Vercel me ek env var bhi rakhna parta.
+
+Yani key add karne se Nexora **behtar nahi, sirf bhaari** hoti.
+
+## Agar aap Z.ai use karna hi chahen
+
+Paid plan lena parega (GLM-4.6 / GLM-5 coding plan). Us soorat me `glm-4.6`
+ya `glm-5` fast bhi hain aur 2025 cutoff bhi rakhte hain — tab add karna
+mustahsan hoga. Entry banane me 2 minute lagenge, endpoint aur auth confirm
+ho chuke hain:
+
+```
+url:    https://api.z.ai/api/paas/v4/chat/completions
+auth:   Authorization: Bearer <ZAI_API_KEY>
+fmt:    openai
+```
