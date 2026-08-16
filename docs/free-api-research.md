@@ -333,3 +333,88 @@ deta, aur **ek bhi naya model na deta**.
 
 Jo cheez Nexora ko chahiye wo aik aur *chalti hui key* hai — aur wo kisi
 gateway se nahi, provider ke sign-up se aati hai.
+
+
+---
+
+# Round 5 — Puter / Agnes / Kiro / Free-GPT4 (16 Aug 2026)
+
+User ne 6 naam diye. Har ek live probe kiya.
+
+## ✅ Agnes AI — ISE LO (registry me add kar diya)
+
+`https://apihub.agnes-ai.com/v1` — OpenAI-compatible.
+
+| | |
+|---|---|
+| Cost | Apne Flash models **$0**, "no fixed end date" |
+| Card | **Nahi chahiye** |
+| Limit | **~20 RPM** |
+| Context | 512K (2.5-flash) |
+| Extras | Tool calling, vision, streaming, image + video models |
+| Cutoff | 2026 — **hamare sab models se naya** |
+
+Live probe: `GET /v1/models` bina key → `{"error":{"message":"未提供令牌"}}`
+(= "token nahi diya"). Yani endpoint **zinda hai**, bas key chahiye.
+Ye baqi 90% "free" providers se behtar signal hai jo 404/522 dete hain.
+
+Registry entries add ho gayin (`agnes-2.5-flash` rank 40, `agnes-2.0-flash`
+rank 44), `envKey: "AGNES_API_KEY"`. Key na ho to `available()` inhe khud
+skip kar deta hai — is liye add karna bilkul be-zarar hai.
+
+**User ka kaam:** platform.agnes-ai.com par key banayein → Vercel me
+`AGNES_API_KEY` daalein → khud chalu ho jayega.
+
+⚠ Ehtiyat: Tech Times ne theek likha — Google Maps / Twitter / Reddit sab
+free shuru hue the. Agnes ko *bonus* samjho, buniyaad nahi.
+
+## ❌ Puter.js — hamare liye kaam ka nahi (aur ye ahem hai)
+
+Marketing: "free, unlimited, 500+ models, no API key". Haqeeqat me ye
+**User-Pays** hai — har END USER apne Puter account se khud paisa deta hai.
+Developer ka bill $0 rehta hai, magar model free nahi — user ka credit khatam
+hone par 402.
+
+Do wajah se Nexora me nahi lag sakta:
+
+1. **Browser-only.** `puter.ai.chat()` ko browser me `<script>` chahiye jo
+   Puter ke sath OAuth kare. Hamara pipeline (`aiCall.ts`, `/api/agents`)
+   **server par** chalta hai. Server se probe kiya:
+   `POST https://api.puter.com/drivers/call` → `{"code":"token_missing"}`.
+   Temp account banane ki koshish → `captcha verification failed`. Server-side
+   raasta jaan boojh kar band hai.
+2. **Har user ko Puter account banana parega** — sign-in, credits, top-up.
+   Ye "free AI" nahi, aap ke users par bill shift karna hai.
+
+`@npcoder/puter-api` bhi yehi masla hal nahi karta: wo ek **local daemon**
+(`127.0.0.1:8741`) hai jo browser SDK ko wrap karta hai. Aap ke laptop par
+chalega, Vercel serverless par nahi.
+
+Khud plugin author (`Mihai-Codes/opencode-puter-auth`) ka README:
+*"Puter's marketing says 'Free, Unlimited' but this is misleading."*
+
+## ❌ Free-GPT4-WEB-API (`d0ckmg/free-gpt4-web-api`)
+
+`g4f` (gpt4free) ka wrapper — Bing/DuckDuckGo ke web UI ko scrape karta hai.
+Teen wajah se na:
+- **Docker container 24/7 chahiye** — Vercel par Docker chalta hi nahi.
+- Scraping hai; provider HTML badle to toot jata hai. Repo ka apna demo
+  server abhi bhi `Not Found` de raha hai (probe kiya).
+- Plain text return karta hai, streaming/tool-calling nahi.
+
+## ❌ Kiro AI
+
+`kiro.dev` → HTTP 403. Ye AWS ka **IDE** hai (Cursor jaisa), API provider
+nahi. Nexora me plug karne ki koi cheez nahi.
+
+## ❌ "Token-Free Gateway"
+
+Ye koi mukhtalis product nahi — general term hai. Round 1-4 me 15+ aise
+gateway dekh chuke hain, sab BYOK. Round 4 ka natija barqarar hai:
+**gateway ≠ free model.**
+
+## Round 5 ka khulasa
+
+6 me se **1** kaam ka: Agnes AI (add ho gaya, key ka intezar).
+Puter aur Free-GPT4 dono "free unlimited" ka daawa karte hain aur dono me
+asli shart chhupi hui hai (user-pays / self-hosted scraping).

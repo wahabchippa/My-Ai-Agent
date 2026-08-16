@@ -568,6 +568,36 @@ export const REGISTRY: Entry[] = [
   // Sirf upar ke DO add kiye hain — baqi ko registry me daalna sirf
   // pipeline me waqt zaya karna hai.
   // ─────────────────────────────────────────────────────────────
+  // ── Agnes AI (Sapiens AI) ──────────────────────────────────────────────
+  // Free tier: apne models (Flash) $0, RPM ~20, card ki zaroorat nahi.
+  // OpenAI-compatible. 512K context, tool calling, vision.
+  // Key lene ke liye: https://platform.agnes-ai.com/ -> API Key banao ->
+  // Vercel me AGNES_API_KEY set karo. Key na ho to available() ise chhod dega.
+  // NOTE: 2.5-flash "suggested flagship" hai; 2.0-flash fallback.
+  {
+    id: "agnes-2.5-flash",
+    name: "Agnes 2.5 Flash",
+    provider: "AgnesAI",
+    fmt: "openai",
+    url: "https://apihub.agnes-ai.com/v1/chat/completions",
+    model: "agnes-2.5-flash",
+    envKey: "AGNES_API_KEY",
+    tags: ["general", "reasoning", "coding"],
+    rank: 40,
+    cutoff: "2026",
+  },
+  {
+    id: "agnes-2.0-flash",
+    name: "Agnes 2.0 Flash",
+    provider: "AgnesAI",
+    fmt: "openai",
+    url: "https://apihub.agnes-ai.com/v1/chat/completions",
+    model: "agnes-2.0-flash",
+    envKey: "AGNES_API_KEY",
+    tags: ["general"],
+    rank: 44,
+    cutoff: "2026",
+  },
   {
     id: "zen-nemotron-ultra",
     name: "Nemotron 3 Ultra (Zen)",
