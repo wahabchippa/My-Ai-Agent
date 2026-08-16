@@ -7,13 +7,14 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { ChatView } from "./components/ChatView";
+import { AgentsView } from "./components/AgentsView";
 import { ProjectsView } from "./components/ProjectsView";
 import { WorkspaceView } from "./components/WorkspaceView";
 import { SettingsView } from "./components/SettingsView";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { cn } from "./utils/cn";
 
-export type ViewType = "chat" | "projects" | "workspace" | "admin" | "settings";
+export type ViewType = "chat" | "agents" | "projects" | "workspace" | "admin" | "settings";
 
 function AppShell() {
   const { user, loading, logout } = useAuth();
@@ -89,6 +90,7 @@ function AppShell() {
 
         <div className="flex-1 overflow-hidden">
           {view === "chat" && <ChatView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "agents" && <AgentsView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
           {view === "projects" && <ProjectsView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "workspace" && <WorkspaceView onOpenSidebar={() => setSidebarOpen(true)} />}

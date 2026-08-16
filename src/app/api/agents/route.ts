@@ -281,10 +281,13 @@ async function runPipeline(
   let researchData = "";
 
   const urlPromise = hasUrl(task) ? readUrlsIn(task).catch(() => "") : null;
-  const searchPromise =
-    team.some((s) => s.needsResearch) && needsResearch(task)
-      ? research(task).catch(() => "")
-      : null;
+  // Pehle shart thi: team.some(needsResearch) AUR needsResearch(task).
+  // Iska matlab tha ke build/review/write ki team ko web kabhi milta hi nahi
+  // tha, kyunki un teams me koi bhi specialist needsResearch nahi hai. To
+  // "latest Next.js 16 API se ye component banao" par model 2024 ki yaad se
+  // jawab likh deta tha. Ab faisla SIRF sawal dekh kar hota hai: agar sawal
+  // ko taaza maloomat chahiye, research chalti hai — team koi bhi ho.
+  const searchPromise = needsResearch(task) ? research(task).catch(() => "") : null;
 
   if (urlPromise || searchPromise) {
     const [pages, search] = await Promise.all([

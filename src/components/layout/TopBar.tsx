@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MenuIcon, BellIcon } from "../ui/icons";
 import { cn } from "@/utils/cn";
-import type { ViewType } from "./Shell";
+import type { ViewType } from "@/App";
 import type { AppUser } from "@/lib/useAuth";
 
 interface TopBarProps {
@@ -19,6 +19,7 @@ export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileN
 
   const viewTitles: Record<ViewType, string> = {
     chat: "AI Chat",
+    agents: "Agent Team",
     projects: "Projects",
     workspace: "Coding Workspace",
     settings: "Settings",
