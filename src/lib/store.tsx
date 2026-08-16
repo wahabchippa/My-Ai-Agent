@@ -69,7 +69,14 @@ interface StoreShape {
 
 const StoreContext = createContext<StoreShape | null>(null);
 
-const LS_KEY = "claude-replica-v1";
+// ⚠ Ye pehle ek hi fixed string thi: "claude-replica-v1".
+// Nateeja: EK hi browser par jo bhi login karta, sab ko WAHI localStorage
+// entry milti thi — is liye har email par ek jaisi chat nazar aati thi.
+// Ab har user ki apni key hai, aur logged-out ke liye alag "guest" key.
+const LS_PREFIX = "nexora-store-v2";
+function lsKeyFor(userId: number | null): string {
+  return userId == null ? `${LS_PREFIX}:guest` : `${LS_PREFIX}:u${userId}`;
+}
 
 const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
@@ -124,9 +131,21 @@ interface Persisted {
   activeProvider?: Provider | null;
 }
 
-function load(): Persisted {
+function emptyState(): Persisted {
+  return {
+    conversations: [],
+    model: "sonnet",
+    theme: "light",
+    personality: "claude",
+    apiKeys: slotsToMap(DEFAULT_SLOTS),
+    activeSlot: DEFAULT_ACTIVE_SLOT,
+    mediaKey: "",
+  };
+}
+
+function load(userId: number | null): Persisted {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(lsKeyFor(userId));
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted & Record<string, unknown>;
       if (parsed && Array.isArray(parsed.conversations)) {
@@ -178,7 +197,11 @@ function load(): Persisted {
     /* ignore */
   }
   return {
-    conversations: seedConversations(),
+    // ⚠ pehle yahan seedConversations() tha — har naye user ko wohi
+    // "Welcome to Nexora" wali banawati chat milti thi, jis se lagta tha
+    // ke sab ki chat ek jaisi hai. Ab naya user khali sidebar se shuru
+    // karta hai (asli chat pehle message par banti hai).
+    conversations: [],
     model: "sonnet",
     theme: "light",
     personality: "claude",
@@ -189,9 +212,20 @@ function load(): Persisted {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  // Server render par localStorage mojood nahi — is liye khali se shuru
+  // karte hain aur asli data neeche wale effect me aata hai.
   const initial = useRef<Persisted | null>(null);
-  if (initial.current === null) initial.current = load();
+  if (initial.current === null) {
+    initial.current =
+      typeof window === "undefined" ? emptyState() : load(null);
+  }
   const data = initial.current;
+
+  // Kaun logged in hai. null = abhi maloom nahi / guest.
+  const [userId, setUserId] = useState<number | null>(null);
+  // Jab tak ye true na ho, hum kuch save NAHI karte — warna guest ka khali
+  // state login wale user ke saved data ke upar chal jata.
+  const [hydrated, setHydrated] = useState(false);
 
   const [conversations, setConversations] = useState<Conversation[]>(
     data.conversations
@@ -204,15 +238,95 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeSlot, setActiveSlotState] = useState<string | null>(data.activeSlot);
   const [mediaKey, setMediaKeyState] = useState<string>(data.mediaKey ?? "");
 
-  // persist — localStorage only (fast, reliable, per-browser)
+  // ── Kaun login hai? ──────────────────────────────────────────────────
+  // Mount par ek dafa. Jawab aane par us user ka apna data load hota hai.
   useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      let uid: number | null = null;
+      try {
+        const r = await fetch("/api/auth/me", { credentials: "include" });
+        if (r.ok) {
+          const j = await r.json();
+          uid = typeof j?.user?.id === "number" ? j.user.id : null;
+        }
+      } catch {
+        /* offline / network — guest samjho */
+      }
+      if (cancelled) return;
+
+      // 1) Pehle is user ka localStorage (fauri, taake screen khali na rahe)
+      const localData = load(uid);
+      setUserId(uid);
+      applyState(localData);
+
+      // 2) Phir Neon se — logged-in ho to server hi asli sach hai
+      if (uid != null) {
+        try {
+          const r = await fetch("/api/state", { credentials: "include" });
+          if (r.ok) {
+            const j = await r.json();
+            const remote = j?.state as Partial<Persisted> | undefined;
+            // Server par kuch ho tab hi lo. Khali server se maqami chat
+            // mitana theek nahi (pehli dafa sync ho rahi hogi).
+            if (remote && Array.isArray(remote.conversations) && remote.conversations.length > 0) {
+              if (!cancelled) applyState({ ...localData, ...remote } as Persisted);
+            }
+          }
+        } catch {
+          /* server na mile to localStorage hi kaafi hai */
+        }
+      }
+
+      if (!cancelled) setHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Ek hi jagah se poora state set karne ka helper.
+  function applyState(st: Persisted) {
+    setConversations(st.conversations);
+    setModelState(st.model);
+    setTheme(st.theme);
+    setPersonalityState(st.personality);
+    setApiKeys(st.apiKeys);
+    setActiveSlotState(st.activeSlot);
+    setMediaKeyState(st.mediaKey ?? "");
+  }
+
+  // ── Save: localStorage foran + Neon 2s debounce ──────────────────────
+  useEffect(() => {
+    // hydrate hone se pehle save mat karo — warna khali state asli data
+    // par chal jayegi.
+    if (!hydrated) return;
+
     const payload: Persisted = { conversations, model, theme, personality, apiKeys, activeSlot, mediaKey };
+
+    // localStorage — is user ki apni key par
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+      localStorage.setItem(lsKeyFor(userId), JSON.stringify(payload));
     } catch {
-      /* ignore */
+      /* quota bhar gaya ya private mode */
     }
-  }, [conversations, model, theme, personality, apiKeys, activeSlot, mediaKey]);
+
+    // Neon — sirf logged-in, aur debounce ta ke har keystroke par PUT na ho
+    if (userId == null) return;
+    const t = setTimeout(() => {
+      fetch("/api/state", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: payload }),
+      }).catch(() => {
+        /* network gaya to localStorage me mehfooz hai */
+      });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [hydrated, userId, conversations, model, theme, personality, apiKeys, activeSlot, mediaKey]);
 
   // apply theme class to <html>
   useEffect(() => {

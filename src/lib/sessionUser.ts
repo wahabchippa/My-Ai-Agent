@@ -1,27 +1,42 @@
 // Session cookie se userId nikalne ka ek hi jagah wala tareeqa.
 //
-// Ye logic pehle /api/state/route.ts ke andar copy-paste tha. Jab memories
-// table me userId add hui to yehi cheez /api/chat me bhi chahiye thi —
-// dobara copy karne ke bajaye yahan nikal di, taake session cookie ka naam
-// ya table ki shakl badle to sirf EK jagah badalni pare.
+// ⚠ YAHAN EK KHAMOSH BUG THA:
+// sessions.token column me token ka SHA-256 HASH mehfooz hota hai
+// (dekho auth.ts -> hashToken()). Purana code cookie ka RAW token seedha
+// column se compare karta tha:
+//     .where(eq(sessions.token, token))     // <- kabhi match nahi hota
+// Nateeja: /api/state HAR request par 401 "Not logged in" deta tha, chahe
+// user bilkul theek login ho. Isi liye Neon ki user_state table me 0 rows
+// thin — save kabhi hua hi nahi.
+//
+// /api/auth/me theek chal raha tha kyunke wo validateSession() use karta
+// hai jo hash karta hai. Bas ye helper reh gaya tha.
 
 import { db } from "@/db";
 import { sessions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
+import { hashToken, getSessionTokenFromRequest } from "@/lib/auth";
 
 /**
  * Request ki session cookie se userId nikalo.
- * Logged-out user, DB na hone, ya ghalat token par `null`.
+ * Logged-out user, DB na hone, expired session, ya ghalat token par `null`.
  */
 export async function getSessionUserId(req: Request): Promise<number | null> {
   if (!db) return null;
-  const token = req.headers.get("cookie")?.match(/nexora_session=([^;]+)/)?.[1];
+  const token = getSessionTokenFromRequest(req);
   if (!token) return null;
   try {
     const sess = await db
       .select({ userId: sessions.userId })
       .from(sessions)
-      .where(eq(sessions.token, token))
+      .where(
+        and(
+          // hash kar ke compare karo — column me hash hi para hai
+          eq(sessions.token, hashToken(token)),
+          // expire shuda session ko qubool mat karo
+          gte(sessions.expiresAt, new Date()),
+        ),
+      )
       .limit(1);
     return sess[0]?.userId ?? null;
   } catch {

@@ -85,6 +85,12 @@ export function useAuth() {
     } catch {}
     localStorage.removeItem(CACHE_KEY);
     setUserState(null);
+    // ⚠ Poora page dobara load karna ZAROORI hai.
+    // StoreProvider apna userId sirf mount par /api/auth/me se leta hai.
+    // Bina reload ke wo purane user ki chat memory me pakre rehta, aur
+    // agla login karne wala wohi chat dekhta — bilkul wohi shakayat.
+    // (Har user ka localStorage apni key par mehfooz rehta hai, mit'ta nahi.)
+    if (typeof window !== "undefined") window.location.href = "/";
   }, []);
 
   return { user, loading, setUser, logout };
