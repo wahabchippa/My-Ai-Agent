@@ -9,9 +9,45 @@ import { Markdown } from "../lib/markdown";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { newId } from "../lib/store";
 import { ClaudeLogo, MenuIcon, ArrowUp, StopIcon, CheckIcon, SparkleIcon } from "./icons";
+import { useAuth } from "../lib/useAuth";
+import { CopyIcon } from "./icons";
 import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ─── Session persistence ───────────────────────────────────────────────
+// Pehle refresh karte hi sab kaam gayab ho jata tha: 35 second ka agent
+// run, jawab, aur poori guftagu — sab. Ab per-user localStorage me
+// mehfooz hai. Key me userId hai (store.tsx wala hi tareeqa) warna ek
+// user ka kaam doosre ko dikh jata — wohi bug jo chat me theek kiya tha.
+const AG_PREFIX = "nexora-agents-v1";
+const agKey = (userId: number | null) =>
+  userId == null ? `${AG_PREFIX}:guest` : `${AG_PREFIX}:u${userId}`;
+
+interface AgentSession {
+  subject: string;
+  kind: string;
+  log: Stage[];
+  finalShown: string;
+  synthBy: string;
+  verify: "passed" | "failed" | "fixed" | null;
+  convo: { role: "user" | "assistant"; content: string }[];
+  researchChars: number;
+  savedAt: number;
+}
+
+function loadSession(userId: number | null): AgentSession | null {
+  try {
+    const raw = localStorage.getItem(agKey(userId));
+    if (!raw) return null;
+    const p = JSON.parse(raw) as AgentSession;
+    // Hafte se purana kaam wapas dikhane ka faida nahi.
+    if (!p?.savedAt || Date.now() - p.savedAt > 7 * 864e5) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
 
 export const MASTER = {
   name: "Atlas",
@@ -86,6 +122,58 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Run kitni der chala — 35s ke intezar me kuch to pata chale.
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(0);
+
+  // Persistence. `hydrated` gate zaroori hai: warna pehla render (jab
+  // state khali hai) foran localStorage par khali data likh deta aur
+  // pichla kaam mit jata — bilkul wohi bug jo chat store me hua tha.
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [hydrated, setHydrated] = useState(false);
+
+
+  // Timer sirf tab chale jab kaam ho raha ho.
+  useEffect(() => {
+    const busy = phase === "planning" || phase === "running" || phase === "synthesizing";
+    if (!busy) return;
+    const t = setInterval(() => setElapsed(Math.round((Date.now() - startRef.current) / 1000)), 500);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  // Mount par pichla session wapas lao.
+  useEffect(() => {
+    const p = loadSession(userId);
+    if (p) {
+      setSubject(p.subject);
+      setKind(p.kind);
+      setLog(p.log ?? []);
+      setDone(new Set((p.log ?? []).map((l) => l.id)));
+      setTeam((p.log ?? []).map((l) => ({ id: l.id, name: l.name, role: l.role, emoji: l.emoji, color: l.color })));
+      setFinalShown(p.finalShown ?? "");
+      setSynthBy(p.synthBy ?? "");
+      setVerify(p.verify ?? null);
+      setConvo(p.convo ?? []);
+      setResearchChars(p.researchChars ?? 0);
+      if (p.finalShown) setPhase("done");
+    }
+    setHydrated(true);
+  }, [userId]);
+
+  // Har mukammal run ke baad save. Adhoore run save nahi karte — refresh
+  // par aadha log dikhana confusing hai.
+  useEffect(() => {
+    if (!hydrated || phase !== "done" || !finalShown) return;
+    try {
+      const payload: AgentSession = {
+        subject, kind, log, finalShown, synthBy, verify, convo, researchChars,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(agKey(userId), JSON.stringify(payload));
+    } catch {}
+  }, [hydrated, phase, finalShown, subject, kind, log, synthBy, verify, convo, researchChars, userId]);
+
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
@@ -120,6 +208,9 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     // Server bhi khud classify karta hai, magar UI ko turant plan dikhana hai
     // (warna pehle response tak screen khaali rehti hai). Server ka faisla
     // aate hi ye overwrite ho jata hai.
+    startRef.current = Date.now();
+    setElapsed(0);
+
     const guess = classifyTask(text);
     setSubject(text);
     setKind(guess);
@@ -284,6 +375,10 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const clearContext = () => {
     reset();
     setConvo([]);
+    setVerify(null);
+    setSynthBy("");
+    // Storage bhi saaf — warna refresh par mita hua kaam wapas aa jata.
+    try { localStorage.removeItem(agKey(userId)); } catch {}
   };
 
   const busy = phase === "planning" || phase === "running" || phase === "synthesizing";
@@ -359,6 +454,7 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             finalShown={finalShown}
             synthBy={synthBy}
             verify={verify}
+            elapsed={elapsed}
             researchChars={researchChars}
             redacted={redacted}
             errMsg={errMsg}
@@ -483,6 +579,25 @@ function IdleHome({
   );
 }
 
+function CopyBtn({ text }: { text: string }) {
+  const [hit, setHit] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setHit(true);
+          setTimeout(() => setHit(false), 1400);
+        });
+      }}
+      title="Poora jawab copy karo"
+      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted transition hover:bg-cream-deep hover:text-coral dark:hover:bg-night-surface"
+    >
+      {hit ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+      {hit ? "copied" : "copy"}
+    </button>
+  );
+}
+
 /* ------------------------------- running ---------------------------------- */
 function agentStatus(
   id: SpecialistId,
@@ -519,6 +634,7 @@ function RunningView({
   finalShown,
   synthBy,
   verify,
+  elapsed,
   researchChars,
   redacted,
   errMsg,
@@ -539,6 +655,7 @@ function RunningView({
   finalShown: string;
   synthBy: string;
   verify: "passed" | "failed" | "fixed" | null;
+  elapsed: number;
   researchChars: number;
   redacted: string[] | null;
   errMsg: string;
@@ -739,6 +856,25 @@ function RunningView({
             <div className="animate-rise mt-4 rounded-2xl border-2 border-coral/30 bg-cream p-4 shadow-[0_8px_30px_rgba(217,119,87,0.1)] dark:bg-night-surface/40">
               <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-coral">
                 <SparkleIcon size={13} /> Final deliverable
+                {/* 35 second ka kaam sirf screen par reh jata tha — na copy
+                    hota tha na save. Ab dono ho sakta hai. */}
+                <span className="ml-auto flex items-center gap-1 normal-case tracking-normal">
+                  <CopyBtn text={finalShown} />
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([finalShown], { type: "text/markdown" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `nexora-${(subject || "task").slice(0, 40).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.md`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}
+                    title="Markdown file ke tor par save karo"
+                    className="rounded-md px-1.5 py-1 text-[11px] font-medium text-muted transition hover:bg-cream-deep hover:text-coral dark:hover:bg-night-surface"
+                  >
+                    .md
+                  </button>
+                </span>
               </div>
               <Markdown text={finalShown} />
               {artifact && (
@@ -760,6 +896,9 @@ function RunningView({
               className="flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-[13px] font-medium text-cream transition hover:opacity-80 dark:bg-cream dark:text-ink"
             >
               <StopIcon size={15} /> Stop orchestrating
+              {elapsed > 0 && (
+                <span className="tabular-nums opacity-60">{elapsed}s</span>
+              )}
             </button>
           ) : (
             <span className="flex items-center gap-2 text-[12px] text-muted">

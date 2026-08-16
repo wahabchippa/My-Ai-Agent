@@ -65,7 +65,10 @@ export const maxDuration = 60;
 // hai kitna waqt bacha hai; na bache to us agent ko skip kar ke jo kaam ho
 // chuka hai wo synthesize kar diya jata hai. Adhoora jawab > koi jawab nahi.
 const BUDGET_MS = 52_000;      // 60 me se 8s safety margin
-const SYNTH_RESERVE_MS = 16_000; // synthesis ke liye hamesha itna bacha rakho
+// 16s kam parhta tha jab se build wave me 4th agent (Scribe) aaya: 4 agents
+// ka jama output ~10k chars hai, aur Agnes usay 15.2s me nahi nichoR paya.
+// 22s do — waves khud ko is ke hisab se chhota kar leti hain.
+const SYNTH_RESERVE_MS = 22_000;
 // Code verification ke liye reserve. Sirf chalane me ~1s lagta hai, magar
 // ye aakhir me hoti hai — pehle ye reserve nahi tha to budget khatam ho
 // jata aur verification kabhi chalti hi nahi thi (live test me `verified:
@@ -309,7 +312,13 @@ async function runPipeline(
 
   for (const wave of waves) {
     // Waqt bacha hai? Warna poori wave skip.
-    const left = BUDGET_MS - (Date.now() - t0) - SYNTH_RESERVE_MS;
+    // Wave ko sirf utna waqt do jitna synthesis AUR verify ke baad bache.
+    // Pehle VERIFY_RESERVE_MS yahan ginti me nahi tha, is liye 3-agent
+    // wave (Scribe add karne ke baad) 42s tak chali jati aur synthesis ka
+    // gate (BUDGET-8s-4s = 40s) pehle hi guzar chuka hota — synthesis
+    // HAMESHA skip, har build run "stitched fallback". Wahi timing bug
+    // jo W5 me pakda tha, naye agent ne wapas paida kar diya.
+    const left = BUDGET_MS - (Date.now() - t0) - SYNTH_RESERVE_MS - VERIFY_RESERVE_MS;
     if (left < 6_000) {
       for (const spec of wave) {
         const stage: StageResult = {
@@ -501,7 +510,13 @@ If you catch yourself writing a plan, stop and write the deliverable instead.`;
       // stitched output se buri hai. Agar synthesis sab se bare stage se
       // bhi chhoti hai, to usay rad kar do.
       const biggest = Math.max(...okStages.map((x) => x.output.length));
-      if (!sr.ok || !sr.text.trim()) continue;
+      // Pehle ye khamoshi se `continue` karta tha, to nakami par sirf
+      // "none (stitched fallback)" milta tha — bina kisi wajah ke. Ab
+      // wajah synthModel me likhi jati hai, warna debug karna andhera hai.
+      if (!sr.ok || !sr.text.trim()) {
+        synthModel = `none (${sr.model}: ${sr.ok ? "khali jawab" : (sr.error ?? "nakaam")})`;
+        continue;
+      }
 
       const leak = looksLikeThinking(sr.text);
       if (leak) {

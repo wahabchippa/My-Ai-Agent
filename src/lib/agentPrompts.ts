@@ -316,8 +316,12 @@ export function classifyTask(task: string): TaskKind {
 export function selectWaves(kind: TaskKind): SpecialistId[][] {
   switch (kind) {
     case "build":
-      // Pehle code banao, phir usay review + test karo (saath saath).
-      return [["engineer"], ["reviewer", "tester"]];
+      // Pehle code banao, phir usay review + test + document karo.
+      // Scribe (documenter) pehle POORE system me kabhi select hi nahi
+      // hota tha — likha para tha aur kabhi na chala. Ab wave-2 me hai,
+      // aur kyunki wave ke andar sab PARALLEL chalte hain, ye extra
+      // agent zero extra waqt leta hai. Muft me docs mil gaye.
+      return [["engineer"], ["reviewer", "tester", "documenter"]];
     case "review":
       // Dono ko sirf user ka code chahiye — parallel.
       return [["reviewer", "tester"]];
