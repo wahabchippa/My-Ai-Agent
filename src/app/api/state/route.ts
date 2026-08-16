@@ -3,23 +3,11 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, sessions, userState } from "@/db/schema";
+import { userState } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getSessionUserId as getUserId } from "@/lib/sessionUser";
 
 export const dynamic = "force-dynamic";
-
-/** Extract user ID from the session cookie. */
-async function getUserId(req: Request): Promise<number | null> {
-  if (!db) return null;
-  const token = req.headers.get("cookie")?.match(/nexora_session=([^;]+)/)?.[1];
-  if (!token) return null;
-  const sess = await db
-    .select({ userId: sessions.userId })
-    .from(sessions)
-    .where(eq(sessions.token, token))
-    .limit(1);
-  return sess[0]?.userId ?? null;
-}
 
 // GET — load the user's saved state
 export async function GET(req: Request) {

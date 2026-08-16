@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { recallMemories, rememberFact, clearAllMemory, extractFact } from "@/lib/memory";
+import { getSessionUserId } from "@/lib/sessionUser";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
@@ -1150,15 +1151,20 @@ export async function POST(req: Request) {
         text = imageOut;
       } else {
       // MEMORY: recall what the user has told us before.
-      const recalled = await recallMemories(lastUser);
+      //
+      // ⚠ memory ab per-user hai. Logged-out user ki koi memory nahi hoti —
+      // pehle sab ki memory ek hi dher me thi, to anonymous request ko bhi
+      // doosron ki batein mil jati thin.
+      const memUserId = await getSessionUserId(req);
+      const recalled = memUserId ? await recallMemories(memUserId, lastUser) : [];
       const memBlock =
         recalled.length > 0
           ? `\n\n[MEMORY — things you know about the user] ${recalled.join(" | ")}`
           : "";
       // Handle explicit memory commands (remember/clear).
-      const fact = extractFact(lastUser);
-      if (fact === "__CLEAR__") await clearAllMemory();
-      else if (fact) await rememberFact(fact);
+      const fact = memUserId ? extractFact(lastUser) : null;
+      if (fact === "__CLEAR__") await clearAllMemory(memUserId!);
+      else if (fact) await rememberFact(memUserId!, fact);
       // SKIP gatherContext in fallback — go straight to models for speed.
       const systemParts = [b.system];
       if (memBlock) systemParts.push(memBlock);
@@ -1177,9 +1183,9 @@ export async function POST(req: Request) {
         messages: b.messages,
       });
         // Auto-remember: if no explicit command but the user shared a name/preference.
-        if (!fact && recalled.length === 0) {
+        if (memUserId && !fact && recalled.length === 0) {
           const autoFact = extractFact(lastUser);
-          if (autoFact && autoFact !== "__CLEAR__") await rememberFact(autoFact);
+          if (autoFact && autoFact !== "__CLEAR__") await rememberFact(memUserId, autoFact);
         }
       } // end image else
     }

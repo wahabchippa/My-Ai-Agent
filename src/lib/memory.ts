@@ -4,24 +4,30 @@
 
 import { db } from "@/db";
 import { memories } from "@/db/schema";
-import { desc, like } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 
-/** Fetch the most recent memories (and any matching the query) for context. */
-export async function recallMemories(query?: string): Promise<string[]> {
-  if (!db) return [];
+/**
+ * Ek user ki memories laao (aur jo query se milti hon).
+ *
+ * ⚠ userId ab LAZMI hai. Pehle ye argument tha hi nahi aur query bina filter
+ * ke chalti thi — har user ko sab ki memories milti thin.
+ */
+export async function recallMemories(userId: number, query?: string): Promise<string[]> {
+  if (!db || !userId) return [];
   try {
     const rows = await db
       .select({ content: memories.content })
       .from(memories)
+      .where(eq(memories.userId, userId))
       .orderBy(desc(memories.createdAt))
       .limit(15);
     let items = rows.map((r) => r.content);
-    // also try a keyword match
+    // keyword match — ye bhi usi user tak mehdood
     if (query && db) {
       const matched = await db
         .select({ content: memories.content })
         .from(memories)
-        .where(like(memories.content, `%${query.slice(0, 40)}%`))
+        .where(and(eq(memories.userId, userId), like(memories.content, `%${query.slice(0, 40)}%`)))
         .limit(5);
       items = [...matched.map((r) => r.content), ...items];
     }
@@ -31,22 +37,27 @@ export async function recallMemories(query?: string): Promise<string[]> {
   }
 }
 
-/** Store a fact in long-term memory. */
-export async function rememberFact(fact: string): Promise<boolean> {
-  if (!db || !fact.trim()) return false;
+/** Ek fact us user ki long-term memory me daalo. */
+export async function rememberFact(userId: number, fact: string): Promise<boolean> {
+  if (!db || !userId || !fact.trim()) return false;
   try {
-    await db.insert(memories).values({ content: fact.trim() });
+    await db.insert(memories).values({ userId, content: fact.trim() });
     return true;
   } catch {
     return false;
   }
 }
 
-/** Wipe all long-term memory. */
-export async function clearAllMemory(): Promise<boolean> {
-  if (!db) return false;
+/**
+ * Sirf IS user ki memory mitao.
+ *
+ * ⚠ Pehle ye `db.delete(memories)` tha — bina WHERE ke. Yani koi bhi user
+ * "forget everything" likhta to POORE system ki, har user ki memory ud jati.
+ */
+export async function clearAllMemory(userId: number): Promise<boolean> {
+  if (!db || !userId) return false;
   try {
-    await db.delete(memories);
+    await db.delete(memories).where(eq(memories.userId, userId));
     return true;
   } catch {
     return false;

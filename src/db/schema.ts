@@ -174,8 +174,17 @@ export const modelRegistry = pgTable("model_registry", {
 });
 
 // Keep existing tables
+//
+// ⚠ userId pehle yahan NAHI tha. Nateeja: recallMemories() bina kisi filter
+// ke sirf "ORDER BY created_at DESC LIMIT 15" karta tha — yani ek user ki
+// "mera naam Wahab hai" DUSRE user ke jawab me aa sakti thi. Baqi har table
+// (conversations, projects, userState) me userId hai; sirf ye chhoot gayi
+// thi. Ye feature ki kami nahi, privacy leak thi.
 export const memories = pgTable("memories", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
