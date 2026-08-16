@@ -45,6 +45,7 @@ function looksLikeThinking(t: string): string | null {
 
 import { research, needsResearch } from "@/lib/research";
 import { readUrlsIn, hasUrl } from "@/lib/webFetch";
+import { verifyCode, buildFixPrompt, type VerifyResult } from "@/lib/verify";
 import { sanitizeMessages } from "@/lib/sanitize";
 import {
   SPECIALISTS,
@@ -65,6 +66,11 @@ export const maxDuration = 60;
 // chuka hai wo synthesize kar diya jata hai. Adhoora jawab > koi jawab nahi.
 const BUDGET_MS = 52_000;      // 60 me se 8s safety margin
 const SYNTH_RESERVE_MS = 16_000; // synthesis ke liye hamesha itna bacha rakho
+// Code verification ke liye reserve. Sirf chalane me ~1s lagta hai, magar
+// ye aakhir me hoti hai — pehle ye reserve nahi tha to budget khatam ho
+// jata aur verification kabhi chalti hi nahi thi (live test me `verified:
+// null` mila jabke code mojood tha).
+const VERIFY_RESERVE_MS = 4_000;
 const AGENT_MAX_MS = 20_000;
 
 const corsHeaders = {
@@ -174,6 +180,7 @@ type Ev =
   | { type: "agent:start"; id: string; name: string; model: string }
   | { type: "agent:done"; stage: StageResult }
   | { type: "synthesis:start" }
+  | { type: "verify"; status: "passed" | "failed" | "fixed"; error?: string }
   | { type: "done"; final: string; synthesizedBy: string; ms: number }
   | { type: "error"; error: string; message: string; status: number };
 
@@ -193,6 +200,8 @@ async function runPipeline(
     messages?: { role: string; content: string }[];
   } | null,
   emit: (e: Ev) => void,
+  /** Request ka origin — /api/execute ko server-side fetch ke liye chahiye. */
+  origin: string,
   /** non-streaming mode ka poora JSON yahan rakha jata hai (per-call, taake
    *  do requests aik doosre ka data na churayein). */
   full?: { value: Record<string, unknown> | null }
@@ -453,7 +462,7 @@ async function runPipeline(
     // yahan fail hona matlab user ko bikhra hua output milega.
     const synthCands = pickModels(["reasoning", "general"], pool.filter((e) => !isStale(e)), [], 3);
     for (const synth of synthCands) {
-      if (Date.now() - t0 > BUDGET_MS - 8_000) break;
+      if (Date.now() - t0 > BUDGET_MS - 8_000 - VERIFY_RESERVE_MS) break;
       const synthSystem =
         buildSystem({ research: researchData }) +
         convoBlock +
@@ -482,7 +491,7 @@ If you catch yourself writing a plan, stop and write the deliverable instead.`;
         synth,
         synthSystem,
         [{ role: "user", content: `ORIGINAL TASK: ${task}\n\nTEAM OUTPUT:${context}\n\nProduce the final deliverable:` }],
-        { timeoutMs: Math.max(8_000, BUDGET_MS - (Date.now() - t0)), temperature: 0.4 }
+        { timeoutMs: Math.max(8_000, BUDGET_MS - (Date.now() - t0) - VERIFY_RESERVE_MS), temperature: 0.4 }
       );
       // QUALITY GUARD: aik run me synthesis ne 10,198ch (code + tests) ko
       // 1,339ch me nichoR diya — poora code block gayab. Aisi "summary"
@@ -506,8 +515,54 @@ If you catch yourself writing a plan, stop and write the deliverable instead.`;
     }
   }
 
+  // ─── 5. VERIFY — code likha hai to CHALA kar dekho ───────────────
+  //
+  // Ye pipeline ka sab se bara gap tha: agent code likhta tha aur bas de
+  // deta tha. /api/execute repo me mojood tha magar koi use nahi karta tha.
+  // Ab toota code pakra jata hai aur agent ko EK dafa theek karne ka
+  // mauqa milta hai.
+  let verification: VerifyResult | null = null;
+  const timeLeft = BUDGET_MS - (Date.now() - t0);
+  if (timeLeft > 3_000 && /```/.test(final)) {
+    verification = await verifyCode(final, origin).catch(() => null);
+
+    if (verification?.attempted && !verification.passed && verification.error) {
+      emit({ type: "verify", status: "failed", error: verification.error });
+
+      // Ek retry — usi model se jis ne likha tha
+      const fixer = pickModels(["coding", "reasoning"], pool.filter((e) => !isStale(e)), [], 1)[0];
+      if (fixer && Date.now() - t0 < BUDGET_MS - 10_000) {
+        const fr = await callModel(
+          fixer,
+          buildSystem({ research: researchData }) + convoBlock,
+          [{ role: "user", content: buildFixPrompt(final, verification) }] as Msg[],
+          { timeoutMs: Math.min(18_000, BUDGET_MS - (Date.now() - t0) - 2_000), temperature: 0.2 },
+        );
+        if (fr.ok && fr.text.trim() && !looksLikeThinking(fr.text)) {
+          const recheck = await verifyCode(fr.text, origin).catch(() => null);
+          // Naya code tabhi lo jab wo waqai behtar ho — warna purana hi
+          // theek hai (kam az kam wo mukammal to tha).
+          if (recheck?.passed || (recheck && !recheck.attempted)) {
+            final = fr.text;
+            verification = recheck;
+            emit({ type: "verify", status: "fixed" });
+          }
+        }
+      }
+    } else if (verification?.passed) {
+      emit({ type: "verify", status: "passed" });
+    }
+  }
+
   if (full) full.value = {
     ok: true,
+    verified: verification
+      ? verification.attempted
+        ? verification.passed
+          ? "passed"
+          : "failed"
+        : "not-verifiable"
+      : null,
     task: rawTask,
     kind,
     redacted: cleaned.redacted ? cleaned.kinds : null,
@@ -526,6 +581,8 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
   const wantsStream =
     new URL(req.url).searchParams.get("stream") === "1" || b?.stream === true;
+  // Server-side fetch ko poora URL chahiye (/api/execute ke liye).
+  const origin = new URL(req.url).origin;
 
   // ─── STREAMING (NDJSON) ───
   // 3 agents = ~40s. Bina stream ke user 40 second khaali screen dekhta hai.
@@ -541,7 +598,7 @@ export async function POST(req: Request) {
           }
         };
         try {
-          send(await runPipeline(b, send));
+          send(await runPipeline(b, send, origin));
         } catch (err) {
           send({
             type: "error",
@@ -565,7 +622,7 @@ export async function POST(req: Request) {
 
   // ─── EK HI JSON RESPONSE ───
   const full: { value: Record<string, unknown> | null } = { value: null };
-  const res = await runPipeline(b, () => {}, full);
+  const res = await runPipeline(b, () => {}, origin, full);
   if (res.type === "error") {
     return Response.json(
       { error: res.error, message: res.message },
