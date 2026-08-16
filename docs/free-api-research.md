@@ -263,3 +263,73 @@ kaam karta hai.** Us ki qadar is round ke baad aur barh gayi: 4 lists,
 Agar aap sign-up karne par razi hon to `providers.json` me sab se behtar
 option **W&B Inference** hai ($100/month free credit, Llama 3.3 70B +
 DeepSeek V4 Flash) — us ke baad ModelScope (~2,000 calls/day).
+
+---
+
+# Round 4: gateways & proxies (16 Aug 2026)
+
+User ne 14 repos dein (2 duplicate: `router-for-me/CLIProxyAPI` do baar).
+Ye pichhle rounds se **alag qism** ki cheezen thin — awesome-lists nahi,
+balke chalne wale **gateways aur proxies**. Isi liye alag se dekha.
+
+**Natija: koi bhi Nexora ko naya free model nahi deta. Sab BYOK hain
+(Bring Your Own Keys).**
+
+## Taqseem
+
+| Repo | ⭐ | Ye asal me kya hai | Nexora ke liye |
+|---|---|---|---|
+| `BerriAI/litellm` | 56k | Self-hosted AI gateway, 100+ providers | ❌ Routing layer — aap ki keys chahiye |
+| `router-for-me/CLIProxyAPI` | 47k | **Paid CLI subscriptions** (Kimi Code, Claude Code, Codex, Antigravity) ko API me badalta hai | ❌ Subscription chahiye |
+| `Helicone/helicone` | 6.1k | LLM **observability** (logging, tracing) | ❌ Model provider hi nahi |
+| `VRSEN/agency-swarm` | 4.5k | Multi-agent framework (Python) | ❌ Framework — hamara apna orchestrator pehle se hai |
+| `APIParkLab/APIPark` | 1.8k | Enterprise API/LLM gateway | ❌ BYOK |
+| `cuihuan/awesome-ai-gateway` | 85 | 160+ gateways ki list | ❌ Gateways ki list, models ki nahi |
+| `mlpal-ai/mlpal-gateway` | 17 | `docker compose up` gateway (Postgres+Redis) | ❌ `.env` me apni keys daalni hain |
+| **`google/clasp`** | 5.8k | **Google Apps Script CLI** | ❌ AI se koi taalluq nahi — ghalti se list me aa gaya |
+
+## "Free" ka daawa karne wale — teenon BYOK nikle
+
+Ye teen sab se ummeed-afza the. Har ek ka README parha:
+
+**`Shaivpidadi/FreeRideV3`** — "102M+ tokens served in 35 days. $0 spent",
+"community free-tier keys". Ummeed thi ke shared keys deta hoga.
+Line 20 ne faisla kar diya:
+
+> "No accounts, no subscriptions, no FreeRide cloud. **Local-first, BYO keys**"
+
+Us ki provider table me har row par "**Get a key**" column hai
+(openrouter.ai/keys, console.groq.com/keys…). Hosted endpoint
+`api.free-ride.xyz/v1` bhi probe kiya → **404 `not_found`**.
+"Community keys" ka matlab sirf ye ke community ne *apni* keys lagayin.
+
+**`Decentralised-AI/freellmapi`** — 12 providers ko aggregate karta hai.
+Line 114: "add **your** provider keys on the Keys page". Keys AES-256-GCM se
+encrypt hoti hain — yani aap ki keys, aap ka server.
+
+**`zxcloli666/AI-Worker-Proxy`** — Cloudflare Worker. Setup ka Step 2 hai
+"Add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`", phir apni provider
+keys. Rotation deta hai, keys nahi.
+
+## Duplicate
+
+`ismailkonvah/awesome-free-llm-apis` (4⭐) = `mnfst/awesome-free-llm-apis`
+(6.6k⭐) ka **purana fork**. Us me koi naya endpoint nahi (grep khaali).
+`mnfst` wali round 3 me pehle hi chhan chuki hai.
+
+## Asal sabak
+
+Char round, ~15 repos, 100+ providers, 20+ live probes ke baad tasveer saaf
+hai:
+
+**Gateway ≠ free models.** LiteLLM, APIPark, FreeRide, mlpal — ye sab wohi
+kaam karte hain jo Nexora ka `modelRegistry` + `pickModels()` pehle se karta
+hai: multi-provider fallback, key rotation, rate-limit par agla model. Farq
+sirf ye ke wo **alag service** hain jise host karna parta; hamara ye kaam
+`/api/agents` ke andar hi hota hai.
+
+In me se koi bhi cheez apna lena Nexora me ek nirbharta (dependency) barha
+deta, aur **ek bhi naya model na deta**.
+
+Jo cheez Nexora ko chahiye wo aik aur *chalti hui key* hai — aur wo kisi
+gateway se nahi, provider ke sign-up se aati hai.
