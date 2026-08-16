@@ -568,12 +568,23 @@ export const REGISTRY: Entry[] = [
   // Sirf upar ke DO add kiye hain — baqi ko registry me daalna sirf
   // pipeline me waqt zaya karna hai.
   // ─────────────────────────────────────────────────────────────
-  // ── Agnes AI (Sapiens AI) ──────────────────────────────────────────────
-  // Free tier: apne models (Flash) $0, RPM ~20, card ki zaroorat nahi.
-  // OpenAI-compatible. 512K context, tool calling, vision.
-  // Key lene ke liye: https://platform.agnes-ai.com/ -> API Key banao ->
-  // Vercel me AGNES_API_KEY set karo. Key na ho to available() ise chhod dega.
-  // NOTE: 2.5-flash "suggested flagship" hai; 2.0-flash fallback.
+  // ── Agnes AI (Sapiens AI) ─────────────────────────────────────────────
+  // 16 Aug 2026 ko ASLI KEY se live test kiya. Nataij:
+  //   /v1/models -> 7 models
+  //   agnes-2.5-flash  1.6s  content saaf   ✔ (yehi lagaya)
+  //   agnes-2.0-flash  2.6s  content saaf   ✔ (fallback)
+  //   agnes-2.5-pro    22.2s ✘ AGENT_MAX_MS (20s) se upar — NAHI lagaya
+  //   agnes-2.5-pro-alpha 3.1s magar reasoning-heavy — NAHI lagaya
+  //   12/12 back-to-back requests OK (RPM ~20 tang nahi kiya)
+  //   Training cutoff: JULY 2026 — hamare har doosre model se naya
+  //   Leak test 2/2 clean (CoT alag `reasoning_content` field me jata hai,
+  //   content me nahi ghustaa — is liye looksLikeThinking() ka masla nahi)
+  //
+  // ⚠ ZAROORI: ye models CoT `reasoning_content` me bhejte hain aur agar
+  // max_tokens kam ho to poora budget wahin kharch kar ke `content` KHALI
+  // chhod dete hain (max_tokens 20 par khud dekha). aiCall.ts already
+  // khali jawab ko reject kar deta hai, magar max_tokens kabhi ~200 se
+  // neeche mat karna.
   {
     id: "agnes-2.5-flash",
     name: "Agnes 2.5 Flash",
@@ -583,8 +594,8 @@ export const REGISTRY: Entry[] = [
     model: "agnes-2.5-flash",
     envKey: "AGNES_API_KEY",
     tags: ["general", "reasoning", "coding"],
-    rank: 40,
-    cutoff: "2026",
+    rank: 12,
+    cutoff: "2026-07",
   },
   {
     id: "agnes-2.0-flash",
@@ -594,9 +605,9 @@ export const REGISTRY: Entry[] = [
     url: "https://apihub.agnes-ai.com/v1/chat/completions",
     model: "agnes-2.0-flash",
     envKey: "AGNES_API_KEY",
-    tags: ["general"],
-    rank: 44,
-    cutoff: "2026",
+    tags: ["general", "coding"],
+    rank: 22,
+    cutoff: "2026-07",
   },
   {
     id: "zen-nemotron-ultra",

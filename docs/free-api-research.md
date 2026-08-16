@@ -362,8 +362,29 @@ Registry entries add ho gayin (`agnes-2.5-flash` rank 40, `agnes-2.0-flash`
 rank 44), `envKey: "AGNES_API_KEY"`. Key na ho to `available()` inhe khud
 skip kar deta hai — is liye add karna bilkul be-zarar hai.
 
-**User ka kaam:** platform.agnes-ai.com par key banayein → Vercel me
-`AGNES_API_KEY` daalein → khud chalu ho jayega.
+**Key mil gayi aur LIVE TEST ho gaya (16 Aug 2026):**
+
+| Model | Waqt | Content | Faisla |
+|---|---|---|---|
+| `agnes-2.5-flash` | **1.6s** | saaf | ✅ **rank 12** |
+| `agnes-2.0-flash` | 2.6s | saaf | ✅ rank 22 (fallback) |
+| `agnes-2.5-pro` | **22.2s** | saaf | ❌ AGENT_MAX_MS (20s) se upar |
+| `agnes-2.5-pro-alpha` | 3.1s | reasoning-heavy | ❌ chhoda |
+
+- **Training cutoff: JULY 2026** — hamare har doosre model se naya
+- **12/12** back-to-back requests OK (RPM ~20 tang nahi hui)
+- **Leak test 2/2 clean** — CoT alag `reasoning_content` field me jata hai,
+  `content` me nahi ghustaa. Yani `looksLikeThinking()` wala purana masla
+  Agnes par pesh nahi aata.
+- Roman Urdu bhi theek bolta hai (test kiya).
+
+### ⚠ Ek asli trap jo test me pakra gaya
+
+`max_tokens: 20` par teenon models ne **poora budget `reasoning_content`
+me kharch kar diya aur `content` KHALI chhoR diya** (`finish_reason: length`).
+Yani chhote max_tokens par ye models khamosh nakaam hote hain.
+`aiCall.ts` khali jawab pehle se reject kar deta hai, magar Agnes ke liye
+**max_tokens kabhi ~200 se neeche na rakhein**. Registry comment me likh diya.
 
 ⚠ Ehtiyat: Tech Times ne theek likha — Google Maps / Twitter / Reddit sab
 free shuru hue the. Agnes ko *bonus* samjho, buniyaad nahi.
