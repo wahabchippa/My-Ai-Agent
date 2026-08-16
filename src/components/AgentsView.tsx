@@ -81,6 +81,8 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   // { task } bhejta tha — is liye har run "pehla run" ban jata tha aur
   // follow-up ("ab isko Python me karo") ka matlab kho jata tha.
   const [convo, setConvo] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  // Code chala kar dekha gaya ya nahi (server ka 'verify' event).
+  const [verify, setVerify] = useState<"passed" | "failed" | "fixed" | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -138,6 +140,7 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     setRedacted(null);
     setErrMsg("");
     setArtifact(null);
+    setVerify(null);
     setPhase("planning");
 
     try {
@@ -208,6 +211,11 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             case "synthesis:start":
               setPhase("synthesizing");
               break;
+            case "verify": {
+              setVerify(ev.status as "passed" | "failed" | "fixed");
+              break;
+            }
+
             case "done": {
               const md = ev.final as string;
               setSynthBy(ev.synthesizedBy as string);
@@ -350,6 +358,7 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             done={done}
             finalShown={finalShown}
             synthBy={synthBy}
+            verify={verify}
             researchChars={researchChars}
             redacted={redacted}
             errMsg={errMsg}
@@ -509,6 +518,7 @@ function RunningView({
   done,
   finalShown,
   synthBy,
+  verify,
   researchChars,
   redacted,
   errMsg,
@@ -528,6 +538,7 @@ function RunningView({
   done: Set<SpecialistId>;
   finalShown: string;
   synthBy: string;
+  verify: "passed" | "failed" | "fixed" | null;
   researchChars: number;
   redacted: string[] | null;
   errMsg: string;
@@ -751,9 +762,37 @@ function RunningView({
               <StopIcon size={15} /> Stop orchestrating
             </button>
           ) : (
-            <span className="text-[12px] text-muted">
-              {MASTER.name} finished · {log.filter((l) => l.ok).length} agents contributed
-              {synthBy && !synthBy.startsWith("none") && ` · synthesized by ${synthBy}`}
+            <span className="flex items-center gap-2 text-[12px] text-muted">
+              <span>
+                {MASTER.name} finished · {log.filter((l) => l.ok).length} agents contributed
+                {synthBy && !synthBy.startsWith("none") && ` · synthesized by ${synthBy}`}
+              </span>
+              {/* Code chalaya gaya to bata do — ye sab se bara farq hai
+                  "likha hua code" aur "chalta hua code" me. */}
+              {verify === "passed" && (
+                <span
+                  className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                  title="Code sandbox me chala kar dekha gaya — chalta hai"
+                >
+                  ✓ code verified
+                </span>
+              )}
+              {verify === "fixed" && (
+                <span
+                  className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                  title="Pehla code toota tha — agent ne khud pakar kar theek kiya"
+                >
+                  ✓ auto-fixed
+                </span>
+              )}
+              {verify === "failed" && (
+                <span
+                  className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+                  title="Code chalaya gaya magar error diya — ehtiyat se istemal karein"
+                >
+                  ⚠ code failed
+                </span>
+              )}
             </span>
           )}
         </div>
