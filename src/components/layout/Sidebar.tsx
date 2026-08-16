@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useStore, type Conversation } from "@/lib/store";
 import {
   PlusIcon, SearchIcon, StarIcon, TrashIcon, MoreVerticalIcon,
-  ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon, SparklesIcon, BrainIcon,
+  ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon,
   SunIcon, MoonIcon, LogOutIcon, HelpCircleIcon,
 } from "../ui/icons";
 import { cn } from "@/utils/cn";
@@ -30,8 +30,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "chat", label: "Chat", icon: ChatIcon },
-  { id: "think", label: "Deep Think", icon: BrainIcon },
-  { id: "agents", label: "Agents", icon: SparklesIcon },
   { id: "projects", label: "Projects", icon: FolderIcon },
   { id: "workspace", label: "Workspace", icon: CodeIcon },
   { id: "settings", label: "Settings", icon: SettingsIcon },

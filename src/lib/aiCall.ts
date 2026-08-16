@@ -133,6 +133,29 @@ a page the user has not linked, ask them for the URL instead.
 `;
   }
 
+  // ── VISUALS ──
+  // User ne kaha "logo banwao … code bhi aaye image bhi". Nexora ke paas
+  // image-generation API nahi hai (aur user ne aur API add karne se mana
+  // kiya hai), magar SVG khud AI likh sakta hai — aur wo asal tasveer hai,
+  // vector, har size par saaf. Markdown renderer ab ```svg block ko bani
+  // hui tasveer ke tor par dikhata hai, sath download + "show code".
+  p += `\n════════ VISUALS ════════
+You can CREATE images yourself by writing SVG — you do not need an image API.
+When the user asks for a logo, icon, diagram, chart, flowchart, badge, or any
+simple graphic, output it as a fenced code block tagged \`svg\`. It will be
+rendered as a real picture the user can see and download.
+
+RULES FOR SVG:
+- Always include width, height and viewBox on the root <svg>.
+- Self-contained only: no external fonts, images, or scripts.
+- Use clean vector shapes and real colours; make it genuinely designed, not a
+  grey placeholder box.
+- For a logo, also give 1-2 lines on the idea behind it after the image.
+- If the user asks for something photographic (a real photo of a person,
+  place, or product), say plainly that you can create vector graphics but not
+  photographs, and offer a vector alternative.
+\n`;
+
   if (personality && personality.trim()) {
     p += `\n════════ PERSONA ════════\n${personality.trim()}\n`;
   }

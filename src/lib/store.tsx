@@ -271,7 +271,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // Server par kuch ho tab hi lo. Khali server se maqami chat
             // mitana theek nahi (pehli dafa sync ho rahi hogi).
             if (remote && Array.isArray(remote.conversations) && remote.conversations.length > 0) {
-              if (!cancelled) applyState({ ...localData, ...remote } as Persisted);
+              // MERGE, replace nahi.
+              //
+              // Pehle server ka array seedha local ke oopar chadh jata tha.
+              // Nateeja: doosre tab/device par jo naye chats bane the, ya jo
+              // abhi 2s debounce ki wajah se server tak pohanche hi nahi
+              // the, wo KHAMOSHI SE MIT jate the. User ko lagta tha "chat
+              // remove ho rahi hai" — aur wo bilkul theek keh raha tha.
+              //
+              // Ab dono taraf ke chats id par jorte hain aur jis ki
+              // updatedAt nayi hai wohi jeetta hai.
+              const byId = new Map<string, Conversation>();
+              for (const c of remote.conversations as Conversation[]) byId.set(c.id, c);
+              for (const c of localData.conversations) {
+                const srv = byId.get(c.id);
+                if (!srv || (c.updatedAt ?? 0) > (srv.updatedAt ?? 0)) byId.set(c.id, c);
+              }
+              const merged = [...byId.values()].sort(
+                (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+              );
+              if (!cancelled) {
+                applyState({ ...localData, ...remote, conversations: merged } as Persisted);
+              }
             }
           }
         } catch {

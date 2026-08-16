@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "../components/icons";
+import { cn } from "../utils/cn";
 
 /**
  * A small, dependency-free Markdown renderer tuned for chat answers.
@@ -12,7 +13,9 @@ import { CheckIcon, CopyIcon } from "../components/icons";
 function renderInline(text: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   // Tokenize while preserving delimiters: `code`, **bold**, *italic*, [text](url)
-  const regex = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)]+\))/g;
+  // ![alt](url) link se PEHLE match hona chahiye, warna "[" wala branch
+  // usay aam link samajh kar image kabhi render na kare.
+  const regex = /(!\[[^\]]*\]\([^)]+\))|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)]+\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let i = 0;
@@ -23,7 +26,33 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
     }
     const tok = match[0];
     const key = `${keyBase}-${i++}`;
-    if (tok.startsWith("`")) {
+    if (tok.startsWith("![")) {
+      // Pehle markdown me image ka koi support tha hi nahi — model
+      // ![chart](url) bhejta to user ko raw text dikhta tha. Ab asal
+      // tasveer banti hai.
+      const m = tok.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+      if (m) {
+        const src = m[2].trim();
+        // data: aur http(s) ke ilawa kuch bhi render karna khatarnak hai.
+        const safe = /^(https?:\/\/|data:image\/)/i.test(src);
+        nodes.push(
+          safe ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={key}
+              src={src}
+              alt={m[1] || "image"}
+              loading="lazy"
+              className="my-3 max-h-[420px] w-auto max-w-full rounded-xl border border-line object-contain dark:border-night-surface"
+            />
+          ) : (
+            <span key={key} className="text-muted">
+              [image: {m[1] || src}]
+            </span>
+          )
+        );
+      }
+    } else if (tok.startsWith("`")) {
       nodes.push(
         <code
           key={key}
@@ -70,6 +99,13 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
 
 function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   const [copied, setCopied] = useState(false);
+  // SVG (logo, chart, diagram) sirf code ke tor par dikhana bekaar hai —
+  // user ne tasveer maangi thi, text nahi. Ab dono milte hain: bani hui
+  // tasveer, aur neeche uska code (khol kar dekh/copy kar sakte hain).
+  const isSvg =
+    (lang ?? "").toLowerCase() === "svg" ||
+    (/^\s*<svg[\s>]/i.test(code) && /<\/svg>\s*$/i.test(code.trim()));
+  const [showCode, setShowCode] = useState(false);
   const copy = () => {
     navigator.clipboard?.writeText(code).then(() => {
       setCopied(true);
@@ -78,7 +114,36 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   };
   return (
     <div className="group/code my-3 overflow-hidden rounded-xl border border-line bg-[#1d1d1b] text-[13px] dark:border-night-surface">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
+      {isSvg && (
+        <div className="flex flex-col items-center gap-2 border-b border-white/10 bg-[repeating-conic-gradient(#f7f6f3_0_25%,#ffffff_0_50%)] bg-[length:16px_16px] p-4">
+          <div
+            className="flex max-h-[320px] w-full items-center justify-center overflow-hidden [&>svg]:max-h-[300px] [&>svg]:max-w-full"
+            dangerouslySetInnerHTML={{ __html: code }}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const blob = new Blob([code], { type: "image/svg+xml" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "nexora-image.svg";
+                a.click();
+                URL.revokeObjectURL(a.href);
+              }}
+              className="rounded-md bg-black/5 px-2 py-1 text-[11px] font-medium text-black/60 transition hover:bg-black/10"
+            >
+              ↓ .svg
+            </button>
+            <button
+              onClick={() => setShowCode((v) => !v)}
+              className="rounded-md bg-black/5 px-2 py-1 text-[11px] font-medium text-black/60 transition hover:bg-black/10"
+            >
+              {showCode ? "hide code" : "show code"}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className={cn("flex items-center justify-between border-b border-white/10 px-4 py-2", isSvg && !showCode && "hidden")}>
         <span className="font-mono text-[11px] uppercase tracking-wider text-white/45">
           {lang || "code"}
         </span>
@@ -90,9 +155,11 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="overflow-x-auto p-4 leading-relaxed">
-        <code className="font-mono text-[#e8e6e0]">{code}</code>
-      </pre>
+      {(!isSvg || showCode) && (
+        <pre className="overflow-x-auto p-4 leading-relaxed">
+          <code className="font-mono text-[#e8e6e0]">{code}</code>
+        </pre>
+      )}
     </div>
   );
 }

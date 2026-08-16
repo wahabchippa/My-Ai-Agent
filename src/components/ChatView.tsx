@@ -110,7 +110,9 @@ export function ChatView({
   const [localStream, setLocalStream] = useState(false);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [web, setWeb] = useState(false);
-  const [mode, setMode] = useState<"fast" | "balanced" | "deep">("balanced");
+  const [mode, setMode] = useState<"fast" | "balanced" | "deep" | "agents">("balanced");
+  // Deep/Agents chalte waqt live qadam — user ko dikhe ke kaam ho raha hai.
+  const [liveSteps, setLiveSteps] = useState<string[]>([]);
   const [showAgents, setShowAgents] = useState(false);
   const [pipelineInfo, setPipelineInfo] = useState<{ agents: string; orchestrator: string } | null>(null);
   const [freeModel, setFreeModel] = useState<string | null>(null);
@@ -146,6 +148,100 @@ export function ChatView({
     cancelRef.current = false;
     setLocalStream(true);
     const m = getModel(mdl);
+
+    // ─── DEEP THINK / AGENTS ───
+    // Pehle ye alag tabs me the aur user ko poochna parta tha "kaunsa
+    // tab?". Ab wohi taqat isi chat me hai — sirf mode badlo.
+    //   deep   -> /api/think  (khud tools chalata hai: search, page, code)
+    //   agents -> /api/agents (poori team: engineer/reviewer/tester/docs)
+    if (!realConfig && (mode === "deep" || mode === "agents")) {
+      try {
+        setLiveSteps([]);
+        const isDeep = mode === "deep";
+        const url = isDeep ? "/api/think?stream=1" : "/api/agents?stream=1";
+        const body = isDeep
+          ? { task: userText, maxSteps: 5, messages: [...history, { role: "user", content: userText }] }
+          : { task: userText, messages: [...history, { role: "user", content: userText }] };
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok || !res.body) throw new Error("stream failed");
+
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        const steps: string[] = [];
+        let finalText = "";
+        let who = "";
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done || cancelRef.current) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            let ev: Record<string, unknown>;
+            try { ev = JSON.parse(line); } catch { continue; }
+
+            if (ev.type === "start") who = String(ev.model ?? "");
+            else if (ev.type === "step") {
+              const st = ev.step as { tool?: string; thought?: string };
+              const label =
+                st.tool === "web_search" ? "🔎 Searched the web"
+                : st.tool === "read_url" ? "🌐 Read a page"
+                : st.tool === "run_code" ? "▶️ Ran the code"
+                : st.tool === "recall" ? "📚 Checked knowledge"
+                : `⚙️ ${st.tool ?? "step"}`;
+              steps.push(label);
+              setLiveSteps([...steps]);
+              patchMessage(convId, assistantId, { thinking: [...steps] });
+            } else if (ev.type === "plan") {
+              const team = (ev.team as { emoji: string; name: string }[]) ?? [];
+              steps.push(`👥 Team: ${team.map((t) => `${t.emoji} ${t.name}`).join(" · ")}`);
+              setLiveSteps([...steps]);
+              patchMessage(convId, assistantId, { thinking: [...steps] });
+            } else if (ev.type === "agent:start") {
+              steps.push(`⏳ ${ev.name} working…`);
+              setLiveSteps([...steps]);
+              patchMessage(convId, assistantId, { thinking: [...steps] });
+            } else if (ev.type === "agent:done") {
+              const st = ev.stage as { name: string; ok: boolean };
+              steps[steps.length - 1] = st.ok ? `✅ ${st.name} done` : `⚠️ ${st.name} skipped`;
+              setLiveSteps([...steps]);
+              patchMessage(convId, assistantId, { thinking: [...steps] });
+            } else if (ev.type === "verify") {
+              steps.push(ev.status === "passed" ? "✓ Code verified — it runs" : ev.status === "fixed" ? "✓ Code auto-fixed" : "⚠ Code failed the check");
+              setLiveSteps([...steps]);
+              patchMessage(convId, assistantId, { thinking: [...steps] });
+            } else if (ev.type === "done") {
+              finalText = String(ev.final ?? "");
+              who = String(ev.model ?? ev.synthesizedBy ?? who);
+            } else if (ev.type === "error") {
+              throw new Error(String(ev.message));
+            }
+          }
+        }
+
+        if (finalText) {
+          patchMessage(convId, assistantId, { content: finalText, thinking: undefined, streaming: false });
+          setPipelineInfo({ agents: who || (isDeep ? "Deep Think" : "Agent team"), orchestrator: steps.join(" · ") });
+          setLiveSteps([]);
+          setLocalStream(false);
+          return;
+        }
+        // Kuch na mila to neeche wala aam raasta chal jayega.
+        setLiveSteps([]);
+      } catch {
+        // Deep/Agents nakaam — chup chaap aam chat par gir jao. User ko
+        // khali screen dena sab se bura natija hai.
+        setLiveSteps([]);
+      }
+    }
 
     // MASTER CONSENSUS: ALL models work in parallel → master AI synthesizes → stream.
     if (!realConfig) {
@@ -402,7 +498,7 @@ export function ChatView({
           </span>
           {/* Mode selector */}
           <div className="flex items-center gap-0.5 rounded-full border border-line bg-cream-deep/50 p-0.5 dark:border-night-surface dark:bg-night-surface/50">
-            {(["fast", "balanced", "deep"] as const).map((m) => (
+            {(["fast", "balanced", "deep", "agents"] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -412,9 +508,17 @@ export function ChatView({
                     ? "bg-coral text-white"
                     : "text-muted hover:text-ink-soft dark:hover:text-cream"
                 )}
-                title={m === "fast" ? "1-2 models, instant" : m === "balanced" ? "3-4 models + tools" : "5+ models + research + verify"}
+                title={
+                  m === "fast"
+                    ? "1-2 models, foran jawab"
+                    : m === "balanced"
+                      ? "3-4 models — rozmarra ke liye"
+                      : m === "deep"
+                        ? "Deep Think: khud web search karta hai, page parhta hai, code CHALA kar check karta hai"
+                        : "Agent team: engineer + reviewer + tester + docs, sab mil kar"
+                }
               >
-                {m === "fast" ? "Fast" : m === "balanced" ? "Balanced" : "Deep"}
+                {m === "fast" ? "Fast" : m === "balanced" ? "Balanced" : m === "deep" ? "🧠 Deep" : "🤖 Agents"}
               </button>
             ))}
           </div>
