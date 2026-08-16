@@ -77,6 +77,10 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const [redacted, setRedacted] = useState<string[] | null>(null);
   const [errMsg, setErrMsg] = useState("");
   const [artifact, setArtifact] = useState<Artifact | null>(null);
+  // Pichli guftagu. Backend ab messages[] parhta hai, magar frontend sirf
+  // { task } bhejta tha — is liye har run "pehla run" ban jata tha aur
+  // follow-up ("ab isko Python me karo") ka matlab kho jata tha.
+  const [convo, setConvo] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +144,11 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
       const res = await fetch("/api/agents?stream=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: text }),
+        body: JSON.stringify({
+          task: text,
+          // aakhri 6 turns — server bhi 6 par cap karta hai
+          messages: [...convo, { role: "user" as const, content: text }].slice(-7),
+        }),
         signal: ac.signal,
       });
 
@@ -204,6 +212,10 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
               const md = ev.final as string;
               setSynthBy(ev.synthesizedBy as string);
               setArtifact(extractArtifact(md));
+              // guftagu yaad rakho — agle run me context ke tor par jayegi
+              setConvo((prev) =>
+                [...prev, { role: "user" as const, content: text }, { role: "assistant" as const, content: md }].slice(-6),
+              );
               // Halka sa stream taake jawab "aata hua" mehsoos ho.
               const tokens = md.match(/\s+|\S+/g) ?? [md];
               const chunk = Math.max(1, Math.ceil(tokens.length / 50));
@@ -241,6 +253,11 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     setPhase("done");
   };
 
+  /**
+   * Screen saaf karo magar guftagu YAAD rakho — taake user agla sawal
+   * pichle jawab ke hawale se pooch sake ("ab isko Python me karo").
+   * Context bhoolne ke liye alag button hai.
+   */
   const reset = () => {
     abortRef.current?.abort();
     setPhase("idle");
@@ -253,6 +270,12 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     setFinalShown("");
     setErrMsg("");
     setArtifact(null);
+  };
+
+  /** Poori shuruaat — guftagu bhi bhool jao. */
+  const clearContext = () => {
+    reset();
+    setConvo([]);
   };
 
   const busy = phase === "planning" || phase === "running" || phase === "synthesizing";
@@ -281,14 +304,35 @@ export function AgentsView({ onOpenSidebar }: { onOpenSidebar: () => void }) {
               </div>
             </div>
           </div>
-          {phase !== "idle" && (
-            <button
-              onClick={reset}
-              className="ml-auto rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink-soft transition hover:bg-cream-deep dark:border-night-surface dark:text-cream"
-            >
-              New task
-            </button>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {convo.length > 0 && (
+              <>
+                {/* Batao ke agent pichli baat yaad rakhe hue hai — warna user
+                    ko pata hi nahi chalega ke follow-up mumkin hai. */}
+                <span
+                  className="rounded-full bg-cream-deep px-2.5 py-1 text-[11px] font-medium text-ink-soft dark:bg-night-surface dark:text-cream/70"
+                  title="Agent pichli guftagu yaad rakhta hai — follow-up sawal pooch sakte hain"
+                >
+                  💬 {convo.length / 2} turn{convo.length / 2 > 1 ? "s" : ""} yaad
+                </span>
+                <button
+                  onClick={clearContext}
+                  className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink-soft transition hover:bg-cream-deep dark:border-night-surface dark:text-cream"
+                  title="Guftagu bhool kar bilkul naye sire se shuru karo"
+                >
+                  Clear context
+                </button>
+              </>
+            )}
+            {phase !== "idle" && (
+              <button
+                onClick={reset}
+                className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-ink-soft transition hover:bg-cream-deep dark:border-night-surface dark:text-cream"
+              >
+                New task
+              </button>
+            )}
+          </div>
         </header>
 
         {phase === "idle" ? (
