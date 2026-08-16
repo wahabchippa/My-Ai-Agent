@@ -47,6 +47,8 @@ import { research, needsResearch } from "@/lib/research";
 import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { verifyCode, buildFixPrompt, type VerifyResult } from "@/lib/verify";
 import { sanitizeMessages } from "@/lib/sanitize";
+import { recall, remember } from "@/lib/nexoraBrain";
+import { getSessionUserId } from "@/lib/sessionUser";
 import {
   SPECIALISTS,
   classifyTask,
@@ -602,6 +604,48 @@ export async function POST(req: Request) {
   // Server-side fetch ko poora URL chahiye (/api/execute ke liye).
   const origin = new URL(req.url).origin;
 
+  // ─── NEXORA BRAIN ───
+  // Agents sab se mehnga raasta hai: 4 models, 30-40 second. Agar yehi
+  // kaam pehle ho chuka hai to dobara karna sirf waqt aur quota zaya
+  // karna hai. Brain hit = foran jawab.
+  const userId = await getSessionUserId(req).catch(() => null);
+  const brainTask = String(
+    b?.task ?? (Array.isArray(b?.messages) ? b.messages[b.messages.length - 1]?.content : "") ?? "",
+  ).trim();
+
+  if (userId && brainTask && b?.brain !== false) {
+    const hit = await recall(userId, brainTask);
+    if (hit) {
+      const payload = {
+        ok: true,
+        fromBrain: true,
+        final: hit.answer,
+        synthesizedBy: "Nexora Brain",
+        stages: [],
+        team: [],
+        verified: null,
+        ms: 0,
+      };
+      if (!wantsStream) return Response.json(payload, { headers: corsHeaders });
+      const enc0 = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(enc0.encode(JSON.stringify({ type: "done", ...payload }) + "\n"));
+            c.close();
+          },
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+          },
+        },
+      );
+    }
+  }
+
   // ─── STREAMING (NDJSON) ───
   // 3 agents = ~40s. Bina stream ke user 40 second khaali screen dekhta hai.
   if (wantsStream) {
@@ -616,7 +660,11 @@ export async function POST(req: Request) {
           }
         };
         try {
-          send(await runPipeline(b, send, origin));
+          const done = await runPipeline(b, send, origin);
+          send(done);
+          if (userId && brainTask && done.type === "done" && done.final) {
+            remember(userId, brainTask, done.final, String(done.synthesizedBy ?? "agents")).catch(() => {});
+          }
         } catch (err) {
           send({
             type: "error",
@@ -646,6 +694,9 @@ export async function POST(req: Request) {
       { error: res.error, message: res.message },
       { status: res.status, headers: corsHeaders }
     );
+  }
+  if (userId && brainTask && res.type === "done" && res.final) {
+    remember(userId, brainTask, res.final, String(res.synthesizedBy ?? "agents")).catch(() => {});
   }
   return Response.json(full.value ?? res, { headers: corsHeaders });
 }

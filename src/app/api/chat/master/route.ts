@@ -38,6 +38,7 @@ import { buildSystem, callModel, raceModels, type Msg } from "@/lib/aiCall";
 import { research, needsResearch } from "@/lib/research";
 import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { sanitizeMessages } from "@/lib/sanitize";
+import { recall, remember } from "@/lib/nexoraBrain";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -204,6 +205,27 @@ export async function POST(req: Request) {
   const authUser = await getUser(req);
   const planConfig = authUser ? await getPlanConfig(authUser) : null;
 
+  // ─── NEXORA BRAIN ───
+  // Ye pehle SIRF /api/think (Deep mode) me tha. Matlab Fast aur Balanced
+  // — jo sab se zyada istemal hote hain — kabhi kuch yaad nahi rakhte the.
+  // Har baar wohi sawal, wohi API call, wohi intezar. Ab har mode seekhta
+  // hai aur har mode apni yaadasht se jawab de sakta hai.
+  if (authUser && b?.brain !== false) {
+    const hit = await recall(authUser.id, lastUser);
+    if (hit) {
+      return new Response(hit.answer, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Nexora-Model": "Nexora Brain",
+          "X-Nexora-Provider": "local",
+          "X-Nexora-Brain": "hit",
+          "X-Nexora-Brain-Score": String(hit.score),
+          ...corsHeaders,
+        },
+      });
+    }
+  }
+
   if (authUser && authUser.plan !== "admin") {
     const usage = await checkUsageLimit(authUser, planConfig);
     if (!usage.allowed) {
@@ -298,6 +320,11 @@ export async function POST(req: Request) {
             REGISTRY.find((e) => e.name === result.model)?.cutoff || "?"
           }) se aaya hai. Behtar jawab ke liye Gemini/Groq key add karein — SETUP-FREE-AI.md dekhein.*`
         : result.text;
+      // Achha jawab hamesha ke liye mehfooz — agli baar 0 API calls.
+      // Purane (stale) model ka jawab yaad nahi rakhte, wo ghalat hoga.
+      if (authUser && !result.stale) {
+        remember(authUser.id, lastUser, result.text, result.model).catch(() => {});
+      }
       return new Response(text, {
         headers: dbg({
           "X-Nexora-Model": result.model,
