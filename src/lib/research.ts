@@ -200,6 +200,16 @@ function strip(s: string): string {
  * purana ho jata. Ab year dynamic hai.
  */
 export function needsResearch(q: string): boolean {
+  // URL diya ho to hamesha — chahe koi keyword na ho.
+  // Purana code sirf keywords dekhta tha, is liye "ye repo check karo
+  // <link>" par research CHALTA HI NAHI tha aur agent keh deta tha
+  // "main web search nahi kar sakta".
+  if (/https?:\/\/|\b(?:github|gitlab|npmjs|stackoverflow)\.com\//i.test(q)) return true;
+
+  // Sawal jo apni zaat me live data maangte hain
+  if (/\b(search|google|dhoond|dekho|check kar|browse|look up|find out|kya chal raha)\b/i.test(q))
+    return true;
+
   const y = new Date().getUTCFullYear();
   const years = [y, y - 1, y + 1].join("|");
   return new RegExp(

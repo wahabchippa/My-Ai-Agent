@@ -36,6 +36,7 @@ import { getUser, getPlanConfig, isModelAllowed, checkUsageLimit, logUsage } fro
 import { REGISTRY, available, hasRealProvider, configuredProviders, isStale, type Entry } from "@/lib/modelRegistry";
 import { buildSystem, callModel, raceModels, type Msg } from "@/lib/aiCall";
 import { research, needsResearch } from "@/lib/research";
+import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { sanitizeMessages } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
@@ -224,8 +225,17 @@ export async function POST(req: Request) {
   // ─── STEP 2: RESEARCH (parallel with nothing — ye pehle hona chahiye
   //     taake system prompt me chala jaye) ───
   let researchData = "";
-  if (c.needsWebSearch) {
-    researchData = await research(lastUser).catch(() => "");
+  {
+    // URL ho to hamesha padho — classifier ki raay ka intezar nahi.
+    const urlP = hasUrl(lastUser) ? readUrlsIn(lastUser).catch(() => "") : null;
+    const searchP = c.needsWebSearch ? research(lastUser).catch(() => "") : null;
+    if (urlP || searchP) {
+      const [pages, search] = await Promise.all([
+        urlP ?? Promise.resolve(""),
+        searchP ?? Promise.resolve(""),
+      ]);
+      researchData = [pages, search].filter(Boolean).join("\n\n---\n\n");
+    }
   }
 
   // ─── STEP 3: SELECT ───

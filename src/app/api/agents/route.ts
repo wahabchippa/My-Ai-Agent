@@ -18,6 +18,7 @@
 import { available, isStale, type Entry } from "@/lib/modelRegistry";
 import { buildSystem, callModel, type Msg } from "@/lib/aiCall";
 import { research, needsResearch } from "@/lib/research";
+import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { sanitizeMessages } from "@/lib/sanitize";
 import {
   SPECIALISTS,
@@ -207,10 +208,26 @@ async function runPipeline(
     redacted: cleaned.redacted ? cleaned.kinds : null,
   });
 
-  // ─── 2. RESEARCH (sirf tab jab team me koi usay maangta ho) ───
+  // ─── 2. RESEARCH + URL READING ───
+  // URL wala kaam team ki marzi par nahi chhoRa ja sakta: agar user ne link
+  // diya hai to wo padhna HI hai, chahe koi specialist "research" na maange.
+  // Pehle ye team.some(...) ke peeche tha, is liye agent kehta tha "main
+  // web search nahi kar sakta" jabke link samne para hota tha.
   let researchData = "";
-  if (team.some((s) => s.needsResearch) && needsResearch(task)) {
-    researchData = await research(task).catch(() => "");
+
+  const urlPromise = hasUrl(task) ? readUrlsIn(task).catch(() => "") : null;
+  const searchPromise =
+    team.some((s) => s.needsResearch) && needsResearch(task)
+      ? research(task).catch(() => "")
+      : null;
+
+  if (urlPromise || searchPromise) {
+    const [pages, search] = await Promise.all([
+      urlPromise ?? Promise.resolve(""),
+      searchPromise ?? Promise.resolve(""),
+    ]);
+    // Diye hue URL ka mazmoon UPAR — wo search results se zyada mutalliq hai.
+    researchData = [pages, search].filter(Boolean).join("\n\n---\n\n");
     if (researchData) emit({ type: "research", chars: researchData.length });
   }
 

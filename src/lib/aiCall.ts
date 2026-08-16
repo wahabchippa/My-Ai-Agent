@@ -106,11 +106,30 @@ Be EXTRA conservative. Volunteer the caveat before the user has to ask.
   if (research && research.trim()) {
     p += `
 ════════ WEB RESEARCH (AUTHORITATIVE — USE THIS) ════════
-The following was fetched from the live web TODAY. It is more current and
-more reliable than your training data. Base time-sensitive claims on it.
+The following was fetched from the live web TODAY by Nexora's own fetcher.
+It is more current and more reliable than your training data. Base
+time-sensitive claims on it.
 
 ${research.trim()}
 ════════ END RESEARCH ════════
+
+⚠ YOU DID READ THIS. Never reply "I cannot browse the web", "I have no
+internet access", or "I cannot open links" — the content is right above and
+it was fetched seconds ago. Answer directly from it and cite the URL or repo
+name. If a block says the page/repo could not be opened, say exactly that —
+do not guess what it contained.
+`;
+  } else {
+    // Research na aayi ho to bhi model ko batao ke salahiyat MOJOOD hai —
+    // warna wo apni training se keh deta hai "main link nahi khol sakta",
+    // jo ab jhoot hai.
+    p += `
+════════ WEB ACCESS ════════
+Nexora can fetch live web pages and GitHub repos. When a URL is provided,
+its contents are fetched automatically and inserted above as WEB RESEARCH.
+No research block appears here, which means either none was needed or the
+fetch returned nothing. Do NOT claim you are unable to browse — if you need
+a page the user has not linked, ask them for the URL instead.
 `;
   }
 
