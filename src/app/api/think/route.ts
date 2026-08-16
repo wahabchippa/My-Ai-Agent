@@ -19,6 +19,8 @@ import { available, type Entry } from "@/lib/modelRegistry";
 import { buildSystem } from "@/lib/aiCall";
 import { sanitizeMessages } from "@/lib/sanitize";
 import { runReactLoop, type Step } from "@/lib/reactLoop";
+import { recall, remember } from "@/lib/nexoraBrain";
+import { getSessionUserId } from "@/lib/sessionUser";
 
 export const maxDuration = 60;
 
@@ -78,13 +80,51 @@ export async function POST(req: NextRequest) {
   const task = msgs[msgs.length - 1].content;
   const history = msgs.slice(0, -1).slice(-6) as { role: "user" | "assistant"; content: string }[];
 
+  const stream = new URL(req.url).searchParams.get("stream") === "1";
+
+  // ─── NEXORA BRAIN ───
+  // Model chalane se PEHLE apni yaadasht dekho. Agar ye sawal (ya is
+  // jaisa) pehle hal ho chuka hai to jawab 0ms me apne paas se aata
+  // hai — koi API call nahi, koi rate limit nahi. Jitna istemal hoga,
+  // utni Nexora khud-mukhtar hoti jayegi.
+  const userId = await getSessionUserId(req);
+  const useBrain = body?.brain !== false;
+  if (userId && useBrain) {
+    const hit = await recall(userId, task);
+    if (hit) {
+      const payload = {
+        ok: true,
+        final: hit.answer,
+        steps: [],
+        model: "Nexora Brain",
+        toolsUsed: ["memory"],
+        hitLimit: false,
+        fromBrain: true,
+        brain: { score: hit.score, savedAt: hit.savedAt, originalQuestion: hit.question, source: hit.source },
+        ms: Date.now() - t0,
+      };
+      if (!stream) return Response.json(payload);
+      // Stream me bhi wohi shakl bhejo taake UI ko farq na parhe.
+      const enc0 = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(enc0.encode(JSON.stringify({ type: "start", model: "Nexora Brain", provider: "local", maxSteps: 0 }) + "\n"));
+            c.enqueue(enc0.encode(JSON.stringify({ type: "done", ...payload, type2: undefined }) + "\n"));
+            c.close();
+          },
+        }),
+        { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } },
+      );
+    }
+  }
+
   const pool = available();
   const chain = pickChain(pool, 3);
   if (!chain.length) return Response.json({ ok: false, error: "no-models" }, { status: 503 });
 
   const origin = new URL(req.url).origin;
   const baseSystem = buildSystem({});
-  const stream = new URL(req.url).searchParams.get("stream") === "1";
 
   const maxSteps = Math.min(6, Math.max(1, Number(body?.maxSteps ?? 4)));
 
@@ -101,7 +141,11 @@ export async function POST(req: NextRequest) {
       if (r.final.trim()) break; // kaam ho gaya
     }
     if (!r) return Response.json({ ok: false, error: "all-models-failed" }, { status: 502 });
+    // Achha jawab hamesha ke liye mehfooz — agli baar 0ms me milega.
+    let saved = false;
+    if (userId && r.final) saved = await remember(userId, task, r.final, r.model);
     return Response.json({
+      saved,
       ok: !!r.final,
       final: r.final,
       steps: r.steps,
@@ -146,8 +190,11 @@ export async function POST(req: NextRequest) {
           controller.close();
           return;
         }
+        let saved = false;
+        if (userId && r.final) saved = await remember(userId, task, r.final, r.model);
         emit({
           type: "done",
+          saved,
           final: r.final,
           model: r.model,
           toolsUsed: r.toolsUsed,

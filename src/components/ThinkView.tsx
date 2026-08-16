@@ -57,6 +57,8 @@ export function ThinkView({ onOpenSidebar }: Props) {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [fromBrain, setFromBrain] = useState(false);
+  const [saved, setSaved] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const startRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,8 @@ export function ThinkView({ onOpenSidebar }: Props) {
     setSteps([]);
     setFinal("");
     setOpen(null);
+    setFromBrain(false);
+    setSaved(false);
     startRef.current = Date.now();
     setElapsed(0);
     const ac = new AbortController();
@@ -117,6 +121,8 @@ export function ThinkView({ onOpenSidebar }: Props) {
           else if (ev.type === "done") {
             setFinal(String(ev.final ?? ""));
             setModel(String(ev.model ?? ""));
+            setFromBrain(ev.fromBrain === true);
+            setSaved(ev.saved === true);
           } else if (ev.type === "error") setError(String(ev.message));
         }
       }
@@ -155,6 +161,8 @@ export function ThinkView({ onOpenSidebar }: Props) {
               setSteps([]);
               setFinal("");
               setModel("");
+              setFromBrain(false);
+              setSaved(false);
             }}
             className="rounded-lg border border-line px-2.5 py-1 text-[11.5px] text-muted transition hover:border-coral/40 hover:text-coral dark:border-night-surface"
           >
@@ -265,6 +273,24 @@ export function ThinkView({ onOpenSidebar }: Props) {
             <div className="animate-rise mt-3 rounded-2xl border-2 border-coral/30 bg-cream p-4 dark:bg-night-surface/40">
               <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-coral">
                 <CheckIcon size={13} /> Answer
+                {/* Brain se aaya = koi API call hui hi nahi. Ye Nexora ki
+                    apni yaadasht hai, aur yehi asal khud-mukhtari hai. */}
+                {fromBrain && (
+                  <span
+                    className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-violet-600 dark:text-violet-400"
+                    title="Ye jawab Nexora ki apni yaadasht se aaya — koi AI API istemal nahi hui"
+                  >
+                    🧠 Nexora Brain · 0 API calls
+                  </span>
+                )}
+                {saved && !fromBrain && (
+                  <span
+                    className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-emerald-600 dark:text-emerald-400"
+                    title="Ye jawab yaad kar liya gaya — agli baar bina API ke milega"
+                  >
+                    ✓ learned
+                  </span>
+                )}
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(final).then(() => {
