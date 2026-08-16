@@ -1,167 +1,337 @@
 "use client";
 
-import { useState } from "react";
-import { buildAnything } from "../lib/builder";
+// ═══════════════════════════════════════════════════════════════════════
+// NEXORA WORKSPACE — AI PROJECT BUILDER
+//
+// PURANA WORKSPACE KYA THA:
+// `src/lib/builder.ts` par chalta tha jis me EK BHI AI call nahi thi.
+// Sirf keyword matching:
+//     "calculator" -> canned calculator HTML
+//     "todo"       -> canned todo HTML
+//     warna        -> generic "website about <topic>"
+// Yani "expense tracker with charts" maango to bhi wohi generic landing
+// page milta tha. Ek file, hamesha wohi, AI ka koi dakhal nahi.
+//
+// AB:
+// POST /api/build asal models se poora project banata hai — 3 se 7 files,
+// folder structure, README — jo yahan file tree me khulti hain, edit hoti
+// hain, live preview me chalti hain, aur ZIP me download hoti hain.
+// ═══════════════════════════════════════════════════════════════════════
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { downloadZip } from "../lib/zip";
 import { cn } from "../utils/cn";
+import { MenuIcon, ArrowUp, CheckIcon, CopyIcon, SparkleIcon, StopIcon } from "./icons";
 
 interface Props {
   onOpenSidebar?: () => void;
 }
 
-const DEFAULT_HTML = `<!doctype html>
-<html>
-<body style="font-family:system-ui;padding:2rem;background:#faf9f5">
-  <h1 style="color:#d97757">Hello from Nexora Workspace 👋</h1>
-  <p>Describe what you want to build in the prompt above, or edit the code below.</p>
-</body>
-</html>`;
-
-const DEFAULT_JS = `// JavaScript sandbox
-function greet(name) {
-  return "Hello, " + name + "!";
+interface ProjectFile {
+  path: string;
+  content: string;
+  lang: string;
 }
-console.log(greet("Nexora"));
-`;
+
+interface Project {
+  name: string;
+  summary: string;
+  stack: string;
+  files: ProjectFile[];
+  built: number;
+  total: number;
+  ms: number;
+}
+
+const LS_KEY = "nexora-workspace-v1";
+
+const EXAMPLES = [
+  "Expense tracker with categories and a pie chart",
+  "Pomodoro timer with session history",
+  "Markdown notes app with live preview",
+  "Python CLI that renames files by EXIF date",
+];
+
+/** Preview ke liye HTML + CSS + JS ko ek document me jorh do. Alag files
+ *  iframe me relative src se load nahi hongi (koi server nahi hai), is
+ *  liye inline karna parta hai. */
+function buildPreview(files: ProjectFile[]): string | null {
+  const html = files.find((f) => /\.html?$/i.test(f.path));
+  if (!html) return null;
+  let out = html.content;
+
+  for (const f of files) {
+    if (/\.css$/i.test(f.path)) {
+      const tag = new RegExp(`<link[^>]*href=["']\\.?/?${f.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*>`, "i");
+      out = out.replace(tag, `<style>\n${f.content}\n</style>`);
+    }
+    if (/\.m?js$/i.test(f.path)) {
+      const tag = new RegExp(`<script[^>]*src=["']\\.?/?${f.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*></script>`, "i");
+      out = out.replace(tag, `<script>\n${f.content}\n</script>`);
+    }
+  }
+  return out;
+}
 
 export function WorkspaceView({ onOpenSidebar }: Props) {
   const [prompt, setPrompt] = useState("");
-  const [lang, setLang] = useState<"html" | "js">("html");
-  const [code, setCode] = useState(DEFAULT_HTML);
-  const [output, setOutput] = useState("");
-  const [running, setRunning] = useState(false);
+  const [project, setProject] = useState<Project | null>(null);
+  const [activePath, setActivePath] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const [tab, setTab] = useState<"code" | "preview">("code");
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const startRef = useRef(0);
 
-  const generate = () => {
-    const t = prompt.trim();
-    if (!t) return;
-    setError("");
+  // Pichla project wapas lao — refresh par 25 second ka kaam zaya na ho.
+  useEffect(() => {
     try {
-      const app = buildAnything(t);
-      setLang("html");
-      setCode(app.html);
-      setOutput("");
-    } catch (e: any) {
-      setError(e.message || "Could not generate");
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as Project;
+        if (p?.files?.length) {
+          setProject(p);
+          setActivePath(p.files[0].path);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!project) return;
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(project));
+    } catch {}
+  }, [project]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setElapsed(Math.round((Date.now() - startRef.current) / 1000)), 500);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  const active = project?.files.find((f) => f.path === activePath) ?? null;
+  const preview = useMemo(() => (project ? buildPreview(project.files) : null), [project]);
+
+  const generate = async () => {
+    const t = prompt.trim();
+    if (!t || busy) return;
+    setError("");
+    setBusy(true);
+    startRef.current = Date.now();
+    setElapsed(0);
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    try {
+      const res = await fetch("/api/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: t }),
+        signal: ac.signal,
+      });
+      const d = await res.json();
+      if (!d.ok) {
+        setError(d.message || d.error || "Project nahi ban saka");
+        return;
+      }
+      setProject(d as Project);
+      setActivePath(d.files[0]?.path ?? "");
+      setTab(d.files.some((f: ProjectFile) => /\.html?$/i.test(f.path)) ? "preview" : "code");
+      setPrompt("");
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setError((e as Error).message || "Network error");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const run = async () => {
-    setError("");
-    setOutput("");
-    if (lang === "html") {
-      // Live preview handled by iframe; just refresh output note
-      setOutput("Preview is on the right →");
-      return;
-    }
-    setRunning(true);
-    setOutput("Running...");
-    try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Execution failed");
-        setOutput((data.logs || []).join("\n"));
-      } else {
-        setOutput([...(data.logs || []), data.result ? `→ ${data.result}` : ""].join("\n"));
-      }
-    } catch (e: any) {
-      setError(e.message || "Execution failed");
-    }
-    setRunning(false);
+  const editActive = (content: string) => {
+    if (!project || !active) return;
+    setProject({
+      ...project,
+      files: project.files.map((f) => (f.path === active.path ? { ...f, content } : f)),
+    });
   };
 
   return (
-    <div className="flex h-full flex-col bg-cream dark:bg-night">
-      <header className="flex items-center gap-2 px-3 py-2.5 sm:px-5">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* header */}
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3 dark:border-night-surface">
         <button
           onClick={onOpenSidebar}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-cream-deep lg:hidden dark:text-cream"
+          className="rounded-lg p-1.5 text-muted transition hover:bg-cream-deep md:hidden dark:hover:bg-night-surface"
         >
-          ☰
+          <MenuIcon size={18} />
         </button>
-        <div className="flex-1">
-          <div className="text-[15px] font-semibold text-ink dark:text-cream">Vibe Coding Workspace</div>
-          <div className="text-[11px] text-muted">Generate, edit & preview — build with AI</div>
-        </div>
-        <button
-          onClick={run}
-          disabled={running}
-          className={cn(
-            "rounded-xl px-4 py-2 text-sm font-semibold transition",
-            running ? "bg-cream-deep text-muted-2" : "bg-coral text-white hover:bg-coral-hover"
-          )}
-        >
-          {running ? "Running..." : "▶ Run"}
-        </button>
-      </header>
-
-      {/* AI prompt bar */}
-      <div className="flex items-end gap-2 px-3 pb-2 sm:px-5">
-        <input
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") generate(); }}
-          placeholder='Ask AI: "make a todo app", "build a calculator", "cafe website"...'
-          className="flex-1 rounded-xl border border-line bg-cream-surface px-4 py-2.5 text-sm text-ink placeholder:text-muted focus:border-coral focus:outline-none dark:border-night-surface dark:bg-night-surface dark:text-cream"
-        />
-        <button
-          onClick={generate}
-          disabled={!prompt.trim()}
-          className={cn(
-            "rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-            prompt.trim() ? "bg-ink text-cream hover:opacity-90 dark:bg-cream dark:text-ink" : "bg-cream-deep text-muted-2 dark:bg-night-surface"
-          )}
-        >
-          ✨ Generate
-        </button>
-      </div>
-
-      {/* Lang toggle */}
-      <div className="flex items-center gap-1 px-3 pb-2 sm:px-5">
-        {(["html", "js"] as const).map((l) => (
-          <button
-            key={l}
-            onClick={() => { setLang(l); setOutput(""); }}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition",
-              lang === l ? "bg-coral text-white" : "bg-cream-deep text-muted hover:text-ink-soft dark:bg-night-surface dark:text-cream/70"
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-ink dark:text-cream">
+            {project ? project.name : "Workspace"}
+            {project && (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10.5px] font-medium text-emerald-600 dark:text-emerald-400">
+                {project.built}/{project.total} files
+              </span>
             )}
-          >
-            {l === "html" ? "HTML · Preview" : "JavaScript · Console"}
-          </button>
-        ))}
-        <span className="ml-auto text-[11px] text-muted-2">{lang === "html" ? "Edits preview live →" : "console.log output ↓"}</span>
-      </div>
-
-      {error && <div className="px-3 pb-1 text-xs text-red-500 sm:px-5">{error}</div>}
-
-      {/* Body */}
-      <div className="grid flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pb-3 md:grid-cols-2 sm:px-5">
-        {/* Code editor */}
-        <textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-          className="h-full w-full resize-none rounded-xl border border-line bg-[#1a1a24] p-4 font-mono text-[13px] leading-relaxed text-cream focus:border-coral focus:outline-none dark:bg-[#0d0d12]"
-        />
-        {/* Preview / Output */}
-        {lang === "html" ? (
-          <iframe
-            title="preview"
-            srcDoc={code}
-            sandbox="allow-scripts"
-            className="h-full w-full rounded-xl border border-line bg-white dark:border-night-surface"
-          />
-        ) : (
-          <div className="overflow-auto rounded-xl border border-line bg-[#1a1a24] p-4 font-mono text-[13px] text-cream/90 dark:bg-[#0d0d12]">
-            {output || <span className="text-cream/40">Run your code to see console output...</span>}
           </div>
+          <div className="truncate text-[11.5px] text-muted">
+            {project ? project.stack : "Describe a project — the AI writes every file"}
+          </div>
+        </div>
+        {project && (
+          <button
+            onClick={() => downloadZip(project.name, project.files.map((f) => ({ path: f.path, content: f.content })))}
+            className="rounded-lg bg-coral px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-coral-hover"
+          >
+            ↓ .zip
+          </button>
         )}
       </div>
+
+      {/* prompt bar */}
+      <div className="border-b border-line px-4 py-3 dark:border-night-surface">
+        <div className="flex items-end gap-2 rounded-xl border border-line bg-cream px-3 py-2 focus-within:border-coral/50 dark:border-night-surface dark:bg-night-surface/40">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                generate();
+              }
+            }}
+            rows={1}
+            disabled={busy}
+            placeholder="Build an expense tracker with charts…"
+            className="max-h-28 min-h-[24px] flex-1 resize-none bg-transparent text-[14px] text-ink placeholder:text-muted focus:outline-none disabled:opacity-50 dark:text-cream"
+          />
+          <button
+            onClick={busy ? () => abortRef.current?.abort() : generate}
+            disabled={!busy && !prompt.trim()}
+            className={cn(
+              "flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition",
+              busy
+                ? "bg-ink text-cream dark:bg-cream dark:text-ink"
+                : prompt.trim()
+                  ? "bg-coral text-white hover:bg-coral-hover"
+                  : "cursor-not-allowed bg-cream-deep text-muted-2 dark:bg-night-surface",
+            )}
+          >
+            {busy ? (
+              <>
+                <StopIcon size={13} /> {elapsed}s
+              </>
+            ) : (
+              <ArrowUp size={15} />
+            )}
+          </button>
+        </div>
+        {!project && !busy && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setPrompt(ex)}
+                className="rounded-full border border-line px-2.5 py-1 text-[11.5px] text-ink-soft transition hover:border-coral/40 hover:text-coral dark:border-night-surface dark:text-cream/70"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        )}
+        {error && <div className="mt-2 text-[12px] text-rose-500">{error}</div>}
+      </div>
+
+      {/* body */}
+      {!project ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-coral to-coral-hover text-[28px] shadow-[0_10px_30px_rgba(217,119,87,0.35)]">
+            🛠️
+          </div>
+          <div className="text-[15px] font-semibold text-ink dark:text-cream">
+            {busy ? `Building… ${elapsed}s` : "Nothing built yet"}
+          </div>
+          <p className="mt-1 max-w-sm text-[12.5px] text-muted">
+            {busy
+              ? "Planning the file structure, then writing each file."
+              : "Describe a project above. You get real files — not one snippet — ready to download and run."}
+          </p>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          {/* file tree */}
+          <div className="w-48 shrink-0 overflow-y-auto border-r border-line py-2 dark:border-night-surface">
+            {project.files.map((f) => (
+              <button
+                key={f.path}
+                onClick={() => {
+                  setActivePath(f.path);
+                  setTab("code");
+                }}
+                className={cn(
+                  "block w-full truncate px-3 py-1.5 text-left font-mono text-[11.5px] transition",
+                  f.path === activePath && tab === "code"
+                    ? "bg-coral-soft text-coral-hover dark:bg-coral/15"
+                    : "text-ink-soft hover:bg-cream-deep dark:text-cream/70 dark:hover:bg-night-surface/60",
+                )}
+              >
+                {f.path}
+              </button>
+            ))}
+            {preview && (
+              <button
+                onClick={() => setTab("preview")}
+                className={cn(
+                  "mt-2 block w-full border-t border-line px-3 py-2 text-left text-[11.5px] font-medium transition dark:border-night-surface",
+                  tab === "preview"
+                    ? "bg-coral-soft text-coral-hover dark:bg-coral/15"
+                    : "text-ink-soft hover:bg-cream-deep dark:text-cream/70 dark:hover:bg-night-surface/60",
+                )}
+              >
+                <SparkleIcon size={11} /> Live preview
+              </button>
+            )}
+          </div>
+
+          {/* editor / preview */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {tab === "preview" && preview ? (
+              <iframe
+                title="preview"
+                srcDoc={preview}
+                sandbox="allow-scripts"
+                className="h-full w-full border-0 bg-white"
+              />
+            ) : active ? (
+              <>
+                <div className="flex items-center gap-2 border-b border-line px-3 py-1.5 dark:border-night-surface">
+                  <span className="font-mono text-[11px] text-muted">{active.path}</span>
+                  <span className="text-[10.5px] text-muted-2">{active.content.length} chars</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(active.content).then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1400);
+                      });
+                    }}
+                    className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted transition hover:bg-cream-deep hover:text-coral dark:hover:bg-night-surface"
+                  >
+                    {copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+                    {copied ? "copied" : "copy"}
+                  </button>
+                </div>
+                <textarea
+                  value={active.content}
+                  onChange={(e) => editActive(e.target.value)}
+                  spellCheck={false}
+                  className="flex-1 resize-none bg-transparent p-3 font-mono text-[12px] leading-relaxed text-ink focus:outline-none dark:text-cream/90"
+                />
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
