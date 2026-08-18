@@ -32,14 +32,67 @@ function hasUrlIn(text: string): boolean {
  *  🔒 KHALI result par bhi SAAF marker bhejte hain — model ko batao ke
  *  research se kuch nahi mila, is liye GUESS mat karo (yehi 'FLEEK ka
  *  founder Harrison Hines' wali hallucination ki wajah tha). */
-async function researchForOllama(text: string): Promise<string> {
+/** 🔒 FACTUAL DISAMBIGUATION — "who is the founder of FLEEK" jaisay sawal
+ *  par entity nikalta hai ("FLEEK") aur HISTORY se context words jorta
+ *  hai ("wholesale marketplace") — taake search sahi company dhoondhe,
+ *  na ke naam-ke-hamzaad (FLEEK vs Fleek). */
+const FACT_STOP = new Set([
+  "the", "and", "with", "that", "this", "from", "your", "have", "been",
+  "about", "into", "what", "when", "where", "which", "who", "how", "why",
+  "not", "but", "for", "you", "are", "was", "were", "will", "would",
+  "could", "should", "mene", "maine", "aapne", "tumne", "pucha", "poocha",
+  "puchha", "wrong", "worng", "galat", "ghalat", "sahi", "theek", "nahi",
+  "hey", "hai", "hain", "kya", "kaun", "kahan", "kaunsa", "kon",
+]);
+
+function enrichFactualQuery(text: string, history?: ChatTurn[]): string {
+  const entity =
+    text
+      .replace(
+        /\b(who|what|which|where|when|how|is|are|was|were|the|of|a|an|do|does|did|please|tell me|about|kaun|kya|kahan|kaunsa|kon|hai|hain|hey)\b/gi,
+        " ",
+      )
+      .replace(/[?.!,:]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)[0] || "";
+  if (entity.length < 2 || !text.toLowerCase().includes(entity.toLowerCase())) return text;
+
+  const ctx: string[] = [];
+  for (const m of history ?? []) {
+    if (!m.content.toLowerCase().includes(entity.toLowerCase())) continue;
+    for (const w of m.content.toLowerCase().split(/\W+/)) {
+      if (w.length >= 5 && !FACT_STOP.has(w) && !ctx.includes(w)) ctx.push(w);
+    }
+  }
+  const hint = /\b(founder|ceo|president|owner|invented|discovered|born|established)\b/i.test(text)
+    ? "founder"
+    : "";
+  const q = [entity, ...ctx.slice(0, 2), hint].filter(Boolean).join(" ");
+  return q === text.toLowerCase() ? text : q;
+}
+
+async function researchForOllama(text: string, history?: ChatTurn[]): Promise<string> {
   try {
-    const ctx = await Promise.race([
-      research(text),
-      new Promise<string>((resolve) => setTimeout(() => resolve(""), 8000)),
+    // 🔒 DISAMBIGUATION: do searches parallel — asli sawal + enriched
+    // ("FLEEK wholesale marketplace founder") — dono merge. Taake
+    // naam-ke-hamzaad wali ghalat company ke results na chalein.
+    const enriched = enrichFactualQuery(text, history);
+    const [ctxA, ctxB] = await Promise.all([
+      Promise.race([
+        research(text),
+        new Promise<string>((resolve) => setTimeout(() => resolve(""), 8000)),
+      ]),
+      enriched !== text
+        ? Promise.race([
+            research(enriched),
+            new Promise<string>((resolve) => setTimeout(() => resolve(""), 8000)),
+          ])
+        : Promise.resolve(""),
     ]);
-    if (ctx.trim()) {
-      return `\n\n[WEB RESEARCH — abhi fetch hua, is par apni training se zyada bharosa karo]\n${ctx.trim()}`;
+    const merged = [ctxA.trim(), ctxB.trim()].filter(Boolean).join("\n\n---\n\n");
+    if (merged) {
+      return `\n\n[WEB RESEARCH — abhi fetch hua, is par apni training se zyada bharosa karo]\n${merged}`;
     }
     return "\n\n[WEB SEARCH: koi natija nahi mila. Agar is sawal ka jawab yaqeen se na jaante ho to SAFA likho 'mujhe tasdeeq shuda maloomat nahi' — andaza/guess mat lagao, aur koi naam/number/tareekh mat ghadna.]";
   } catch {
@@ -795,7 +848,7 @@ export function ChatView({
       // 🔒 TINY-MODEL GUARD: chhote models (0.5b-3b) factual sawalon par
       // ghalat naam ghad dete hain (jaise 'John Doe') — unhe factual
       // sawal hi mat do, seedha cloud/web path par bhejo.
-      const tinyLocal = /\b(0\.5b|0\.6b|1b|1\.5b|2b|3b|3\.1b|3\.2b|tiny|nano|mini|phi-?2)\b/i.test(
+      const tinyLocal = /\b(0\.5b|0\.6b|0\.7b|1b|1\.1b|1\.5b|1\.6b|1\.7b|2b|2\.2b|3b|3\.1b|3\.2b|4b|tiny|nano|mini|phi-?2)\b/i.test(
         bestCfg.model,
       );
 
@@ -875,7 +928,7 @@ export function ChatView({
         // taake model training se guess na kare.
         if (((needWeb || !good) && !cancelRef.current) || (factualQ && !good)) {
           patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
-          const researchBlock = await researchForOllama(corrected ? correctionQuery : userText);
+          const researchBlock = await researchForOllama(corrected ? correctionQuery : userText, history);
           const researchHasData = researchBlock.includes("[WEB RESEARCH");
 
           // 🚫 NO-GUESS GUARD (asli "dumb AI" ka ilaj):
@@ -980,16 +1033,25 @@ export function ChatView({
         let verifyNote = "";
         if (good && factualQ && !cancelRef.current) {
           patchMessage(convId, assistantId, { thinking: ["Web se verify kar raha hai…"] });
-          const check = await researchForOllama(corrected ? correctionQuery : userText);
+          const check = await researchForOllama(corrected ? correctionQuery : userText, history);
           const researchTxt = check.toLowerCase();
           const hasResults = researchTxt.includes("web research");
+          // 🔒 NAME-BASED GROUNDING: jawab ke capitalized names (proper
+          // nouns) research me honne chahiye. Koi name na ho (''nahi
+          // pata' style) = theek. Name ho aur research me na ho =
+          // ghadha hua (John Doe) → reject.
+          const names = (finalText.match(/\b[A-Z][a-z]{2,}(?:\s[A-Z][a-z]{2,})?\b/g) || []).map((n) =>
+            n.toLowerCase(),
+          );
+          const nameHits = names.filter((n) => researchTxt.includes(n)).length;
           const keyWords = finalText
             .toLowerCase()
             .split(/\W+/)
             .filter((w) => w.length > 4)
             .slice(0, 12);
-          const hits = keyWords.filter((k) => researchTxt.includes(k)).length;
-          verified = hasResults && hits >= 2;
+          const kwHits = keyWords.filter((k) => researchTxt.includes(k)).length;
+          verified =
+            hasResults && (names.length === 0 ? true : nameHits >= 1) && kwHits >= 1;
           if (!verified) {
             // 🚫 Galat jawab dikhane se behtar: confirm na hone par answer
             // hi hata do — 'John Doe' jaisa ghadha hua naam kabhi na dikhe.

@@ -293,13 +293,45 @@ export async function POST(req: Request) {
   {
     // URL ho to hamesha padho — classifier ki raay ka intezar nahi.
     const urlP = hasUrl(lastUser) ? readUrlsIn(lastUser).catch(() => "") : null;
-    const searchP = c.needsWebSearch || factualQ ? research(lastUser).catch(() => "") : null;
-    if (urlP || searchP) {
-      const [pages, search] = await Promise.all([
+    // 🔒 DISAMBIGUATION: factual sawal par do searches parallel —
+    // asli sawal + entity/history-se-enriched ("FLEEK wholesale
+    // marketplace founder") — taake naam-ke-hamzaad (FLEEK vs Fleek)
+    // wali ghalat company ke results na chalein.
+    let enrichedQ = lastUser;
+    if (factualQ) {
+      const entity =
+        lastUser
+          .replace(
+            /\b(who|what|which|where|when|how|is|are|was|were|the|of|a|an|do|does|did|please|tell me|about)\b/gi,
+            " ",
+          )
+          .replace(/[?.!,:]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .split(/\s+/)[0] || "";
+      if (entity.length >= 2) {
+        const ctx: string[] = [];
+        for (const m of (b.messages as Msg[]).slice(0, -1)) {
+          if (!m.content.toLowerCase().includes(entity.toLowerCase())) continue;
+          for (const w of m.content.toLowerCase().split(/\W+/)) {
+            if (w.length >= 5 && !["wrong","worng","galat","ghalat","nahi","sahi","theek","mene","maine","pucha","poocha","hey","hai","marketplace","company"].includes(w) && !ctx.includes(w)) ctx.push(w);
+          }
+        }
+        const hint = /\b(founder|ceo|president|owner)\b/i.test(lastUser) ? " founder" : "";
+        enrichedQ = [entity, ...ctx.slice(0, 2)].join(" ") + hint;
+      }
+    }
+    const searchP =
+      c.needsWebSearch || factualQ ? research(lastUser).catch(() => "") : null;
+    const searchP2 =
+      factualQ && enrichedQ !== lastUser ? research(enrichedQ).catch(() => "") : null;
+    if (urlP || searchP || searchP2) {
+      const [pages, search, search2] = await Promise.all([
         urlP ?? Promise.resolve(""),
         searchP ?? Promise.resolve(""),
+        searchP2 ?? Promise.resolve(""),
       ]);
-      researchData = [pages, search].filter(Boolean).join("\n\n---\n\n");
+      researchData = [pages, search, search2].filter(Boolean).join("\n\n---\n\n");
     }
   }
 

@@ -119,7 +119,7 @@ export function SettingsView({ onOpenSidebar }: Props) {
               {localModels.length > 0 &&
                 (() => {
                   const cur = ollama.model || "";
-                  const tiny = /(0\.5b|0\.6b|1b|1\.1b|1\.5b|2b|3b|3\.1b|4b|tiny|nano|mini|phi-?2)/i.test(cur);
+                  const tiny = /(0\.5b|0\.6b|0\.7b|1b|1\.1b|1\.5b|1\.6b|1\.7b|2b|2\.2b|3b|3\.1b|3\.2b|4b|tiny|nano|mini|phi-?2)/i.test(cur);
                   const bad = tiny && localModels.some((m) => m === cur || cur === "");
                   return bad ? (
                     <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-600 dark:text-amber-400">
