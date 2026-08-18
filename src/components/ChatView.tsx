@@ -7,7 +7,7 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
-import { chatOllamaStream, ollamaReady, ollamaReachable, hideModelName } from "../lib/ollama";
+import { chatOllama, chatOllamaStream, ollamaReady, ollamaReachable, hideModelName, type OllamaConfig } from "../lib/ollama";
 import { needsResearch, research } from "../lib/research";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
@@ -70,6 +70,39 @@ async function memoryForOllama(text: string): Promise<string> {
     return mem;
   } catch {
     return "";
+  }
+}
+
+/** LOCAL TRIAGE — Ollama khud batata hai ke sawal ko kya chahiye:
+ *  web? code? complex? (chhota, tez call — regex ka smart replacement).
+ *  Fail ho to null → caller regex fallback use karta hai. */
+async function localTriage(
+  ollama: OllamaConfig,
+  text: string,
+): Promise<{ web: boolean; mode: "direct" | "research" | "code" | "complex" } | null> {
+  try {
+    const raw = await Promise.race([
+      chatOllama(ollama, {
+        system:
+          "Classify the user's question. Reply with ONLY JSON, no fence, no explanation: " +
+          '{"web":true/false,"mode":"direct"|"research"|"code"|"complex"}. ' +
+          "web=true jab jawab ko FRESH/current info chahiye (news, price, latest, weather, sports, 'abhi', 'aaj', 'current', version). " +
+          "mode: code = programming help; complex = multi-step/deep analysis; research = web chahiye; direct = baqi sab.",
+        messages: [{ role: "user", content: text.slice(0, 400) }],
+        signal: AbortSignal.timeout(6000),
+      }),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 6000)),
+    ]);
+    const m = raw.trim().match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const j = JSON.parse(m[0]) as { web?: unknown; mode?: unknown };
+    if (typeof j?.web !== "boolean") return null;
+    const mode = ["direct", "research", "code", "complex"].includes(String(j.mode))
+      ? (j.mode as "direct" | "research" | "code" | "complex")
+      : "direct";
+    return { web: j.web, mode };
+  } catch {
+    return null;
   }
 }
 
@@ -438,67 +471,131 @@ export function ChatView({
       }
     }
 
-    // ── OLLAMA-FIRST — LOCAL AI MAIN ENGINE ────────────────────────────
-    // Nexora ka asli engine ab LOCAL Ollama hai: free, private, tez.
-    // AUR ab web-search + memory ke saath POWERFUL: current-events ke
-    // sawal par bhi Ollama hi jawab deta hai — live web results aur
-    // user ki pehle-batayi hui baatein is ke prompt me inject hoti
-    // hain. Cloud (multi-model) SIRF tab jab: URL ho, ya Ollama fail/
-    // khali/short jawab de.
+    // ── OLLAMA-FIRST — SMART LADDER (LOCAL AI MAIN ENGINE) ─────────────
+    // Behtar workflow: LOCAL TRIAGE → L1 direct → L2 +web → L2b code
+    // verify/fix → L3 cloud. Ollama khud faisla karta hai (regex sirf
+    // fallback), code answers sandbox me VERIFY hote hain aur error par
+    // EK dafa auto-fix hota hai. Cloud sirf jab: URL, complex sawal,
+    // ya local na de saka. Ollama aakhir me cloud answer polish bhi
+    // karta hai (polishLocal).
     if (!realConfig && !hasUrlIn(userText) && (await ollamaReachable(ollama))) {
-      let localOk = false;
-      try {
-        // System prompt me context jama karo: base + web research + memory
-        let sys = systemPrompt(personality);
-        const wantFresh = web || needsResearch(userText);
-        if (wantFresh) {
-          patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
-          sys += await researchForOllama(userText);
-          patchMessage(convId, assistantId, { thinking: [] });
-        }
-        sys += await memoryForOllama(userText);
+      patchMessage(convId, assistantId, { thinking: ["Local AI soch raha hai…"] });
+      const triage = await localTriage(ollama, userText);
+      const needWeb = web || (triage?.web ?? needsResearch(userText));
+      const isCode =
+        triage?.mode === "code" ||
+        /\b(code|function|bug|error|javascript|python|react|api|html|css|sql|typescript)\b/i.test(userText);
+      const complex = triage?.mode === "complex";
 
-        await chatOllamaStream(
-          ollama,
-          {
-            system: sys,
-            messages: [...history, { role: "user", content: userText }],
-            signal: AbortSignal.timeout(30_000),
-          },
-          (partial) => {
-            if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial });
-          },
-        )
-          .then((t) => {
-            const junk =
-              !t.trim() ||
-              t.trim().length < 15 ||
-              /^(i (don't|do not|cannot|can't|am unable)|sorry|mujhe nahi pata|main nahi jaanta)/i.test(
-                t.trim(),
-              );
-            localOk = !junk;
-            if (localOk && !cancelRef.current) {
-              setPipelineInfo({
-                agents: wantFresh ? "Local AI + Web" : "Local AI",
-                orchestrator: hideModelName(ollama.model) || "Ollama",
+      let localAnswer = "";
+      let good = false;
+      const runLocal = async (sys: string): Promise<boolean> => {
+        try {
+          let ok = false;
+          await chatOllamaStream(
+            ollama,
+            {
+              system: sys,
+              messages: [...history, { role: "user", content: userText }],
+              signal: AbortSignal.timeout(30_000),
+            },
+            (partial) => {
+              if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial });
+            },
+          )
+            .then((t) => {
+              const junk =
+                !t.trim() ||
+                t.trim().length < 15 ||
+                /^(i (don't|do not|cannot|can't|am unable)|sorry|mujhe nahi pata|main nahi jaanta)/i.test(
+                  t.trim(),
+                );
+              ok = !junk;
+              if (ok) localAnswer = t.trim();
+            })
+            .catch(() => {
+              ok = false;
+            });
+          return ok;
+        } catch {
+          return false;
+        }
+      };
+
+      if (!complex) {
+        // L1 — direct local (memory ke saath)
+        let sys = systemPrompt(personality) + (await memoryForOllama(userText));
+        if (!needWeb) good = await runLocal(sys);
+
+        // L2 — local + LIVE WEB (jab web chahiye ya L1 na chal saka)
+        if ((needWeb || !good) && !cancelRef.current) {
+          patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
+          sys =
+            systemPrompt(personality) +
+            (await researchForOllama(userText)) +
+            (await memoryForOllama(userText));
+          good = await runLocal(sys);
+        }
+
+        // L2b — CODE VERIFY + 1 AUTO-FIX (code answers ka quality gate)
+        if (good && isCode && !cancelRef.current) {
+          const block = localAnswer.match(/```(?:js|javascript|ts|typescript)\s*\n([\s\S]*?)```/i);
+          if (block && block[1].trim().length > 0 && block[1].trim().length <= 6000) {
+            patchMessage(convId, assistantId, { thinking: ["Verifying code…"] });
+            const vr = await fetch("/api/execute", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: block[1].trim() }),
+            }).catch(() => null);
+            const vd = vr ? await vr.json().catch(() => null) : null;
+            if (vr?.ok && vd && !vd.error) {
+              patchMessage(convId, assistantId, {
+                thinking: ["✅ Code verified"],
+                content: localAnswer + "\n\n---\n*✅ Code sandbox me chala kar verify kiya gaya — theek chalta hai.*",
               });
-              patchMessage(convId, assistantId, { content: t, streaming: false });
-              setLocalStream(false);
+            } else if (vd?.error && !cancelRef.current) {
+              // EK dafa auto-fix — error wapas local AI ko
+              patchMessage(convId, assistantId, { thinking: ["Code me error — local fix kar raha hai…"] });
+              const fixed = await runLocal(
+                systemPrompt(personality) +
+                  `\n\nTumhara likha hua code ye error de raha hai:\n${String(vd.error).slice(0, 400)}\n\nSIRF code block dobara likho (fix ke saath).` +
+                  (await memoryForOllama(userText)),
+              );
+              if (fixed && !cancelRef.current) {
+                patchMessage(convId, assistantId, {
+                  content: localAnswer,
+                  streaming: false,
+                  thinking: ["✅ Code fixed"],
+                });
+              } else {
+                patchMessage(convId, assistantId, { thinking: [] });
+              }
+            } else {
+              patchMessage(convId, assistantId, { thinking: [] });
             }
-          })
-          .catch(() => {
-            localOk = false;
+          }
+        }
+
+        if (good && !cancelRef.current) {
+          setPipelineInfo({
+            agents: needWeb ? "Local AI + Web" : isCode ? "Local AI + Verify" : "Local AI",
+            orchestrator: hideModelName(ollama.model) || "Ollama",
           });
-      } catch {
-        localOk = false;
+          patchMessage(convId, assistantId, { content: localAnswer, streaming: false });
+          setLocalStream(false);
+          return;
+        }
+        if (cancelRef.current) {
+          setLocalStream(false);
+          return;
+        }
+        // Local na de saka — cloud (L3) sambhalta hai.
+        patchMessage(convId, assistantId, { thinking: ["Local AI ne theek jawab na diya — cloud le raha hai"] });
+      } else {
+        // complex → seedha cloud (L3) — local sirf final polish karega
+        patchMessage(convId, assistantId, { thinking: [] });
       }
-      if (localOk) return;
-      if (cancelRef.current) {
-        setLocalStream(false);
-        return;
-      }
-      // Ollama khali/fail — cloud (research + multi-model) sambhalta hai.
-      patchMessage(convId, assistantId, { thinking: ["Local AI ne jawab na diya — cloud le raha hai"] });
     }
 
     // MASTER CONSENSUS: ALL models work in parallel → master AI synthesizes → stream.
