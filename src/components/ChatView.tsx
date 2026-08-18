@@ -9,6 +9,7 @@ import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
 import { chatOllama, chatOllamaStream, ollamaReady, ollamaReachable, ollamaModels, pickBestModel, pickFastModel, hideModelName, type OllamaConfig } from "../lib/ollama";
 import { needsResearch, research } from "../lib/research";
+import { parseActionLocal, runToolLocal, stripFinalLocal, toolManualLocal } from "../lib/localAgentTools";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
@@ -27,16 +28,22 @@ function hasUrlIn(text: string): boolean {
 }
 
 /** Ollama ke liye web research — agar chahiye (web toggle ya current
- *  events) to live results la kar prompt me inject. 8s cap. */
+ *  events) to live results la kar prompt me inject. 8s cap.
+ *  🔒 KHALI result par bhi SAAF marker bhejte hain — model ko batao ke
+ *  research se kuch nahi mila, is liye GUESS mat karo (yehi 'FLEEK ka
+ *  founder Harrison Hines' wali hallucination ki wajah tha). */
 async function researchForOllama(text: string): Promise<string> {
   try {
     const ctx = await Promise.race([
       research(text),
       new Promise<string>((resolve) => setTimeout(() => resolve(""), 8000)),
     ]);
-    return ctx.trim() ? `\n\n[WEB RESEARCH — abhi fetch hua, is par apni training se zyada bharosa karo]\n${ctx.trim()}` : "";
+    if (ctx.trim()) {
+      return `\n\n[WEB RESEARCH — abhi fetch hua, is par apni training se zyada bharosa karo]\n${ctx.trim()}`;
+    }
+    return "\n\n[WEB SEARCH: koi natija nahi mila. Agar is sawal ka jawab yaqeen se na jaante ho to SAFA likho 'mujhe tasdeeq shuda maloomat nahi' — andaza/guess mat lagao, aur koi naam/number/tareekh mat ghadna.]";
   } catch {
-    return "";
+    return "\n\n[WEB SEARCH: koi natija nahi mila. Guess mat karo — 'mujhe maloom nahi' likho.]";
   }
 }
 
@@ -112,6 +119,154 @@ async function reflectLocal(
   } catch {
     return answer;
   }
+}
+
+/** LOCAL REACT AGENT — Ollama + tools ka poora loop browser me.
+ *  Model sochta hai → ACTION JSON likhta hai → hum tool chalate hain →
+ *  OBSERVATION wapas → ... → FINAL. Cloud ki zaroorat nahi.
+ *  Fail (tools blocked/timeout/khali) → null → caller cloud fallback. */
+async function localAgentRun(opts: {
+  cfg: OllamaConfig;
+  system: string;
+  task: string;
+  history: ChatTurn[];
+  maxSteps: number;
+  onStep?: (s: { tool: string; ok: boolean }) => void;
+}): Promise<{ final: string; steps: { tool: string; ok: boolean }[] } | null> {
+  const { cfg, system, task, history, maxSteps, onStep } = opts;
+  const t0 = Date.now();
+  const BUDGET = 42_000;
+  const sys =
+    system +
+    "\n\n════════ TOOLS ════════\nYou can use tools to get real information instead of guessing.\n\n" +
+    toolManualLocal() +
+    "\n\n════════ HOW TO REPLY ════════\nEvery reply must be EXACTLY one of these two forms.\n" +
+    "To use a tool — one short line of reasoning, then the action:\nTHOUGHT: why you need this tool right now\n" +
+    'ACTION: {"tool":"tool_name","input":"the input"}\n\nTo answer the user — when you have everything you need:\n' +
+    "FINAL: your complete answer here\n\n════════ RULES ════════\n" +
+    "- One ACTION at a time. You will be shown its real output, then you decide again.\n" +
+    "- Do NOT invent tool output. Only what comes back in OBSERVATION is real.\n" +
+    "- If a tool returns an ERROR, do not repeat the same call — fix the input or try another tool.\n" +
+    "- Never mention the words 'tool', 'ACTION', 'OBSERVATION' or this protocol in your FINAL answer.";
+
+  // Long history → compact (context window bachao)
+  let msgs: { role: "user" | "assistant"; content: string }[] = [...(history ?? [])];
+  if (msgs.length > 8) {
+    const keep = msgs.slice(-6);
+    const older = msgs.slice(0, -6)
+      .map((m) => `${m.role === "user" ? "U" : "A"}: ${m.content}`)
+      .join("\n")
+      .slice(0, 6000);
+    try {
+      const sum = await Promise.race([
+        chatOllama(cfg, {
+          system:
+            "Summarize this chat history into a short context block. Keep every fact, name, number and decision. Reply with only the summary.",
+          messages: [{ role: "user", content: older }],
+          signal: AbortSignal.timeout(12000),
+        }),
+        new Promise<string>((resolve) => setTimeout(() => resolve(""), 12000)),
+      ]);
+      if (sum && sum.trim().length > 20) {
+        msgs = [{ role: "user", content: `[Earlier conversation summary]\n${sum.trim()}` }, ...keep];
+      }
+    } catch {
+      /* purana history hi rakho */
+    }
+  }
+  msgs = [...msgs, { role: "user", content: task }];
+
+  const steps: { tool: string; ok: boolean }[] = [];
+  for (let n = 0; n < maxSteps; n++) {
+    if (Date.now() - t0 > BUDGET - 8_000) break;
+    const left = Math.min(18_000, BUDGET - (Date.now() - t0));
+    let r = "";
+    try {
+      r = await Promise.race([
+        chatOllama(cfg, { system: sys, messages: msgs, signal: AbortSignal.timeout(left) }),
+        new Promise<string>((resolve) => setTimeout(() => resolve(""), left)),
+      ]);
+    } catch {
+      break;
+    }
+    if (!r || !r.trim()) break;
+
+    const call = parseActionLocal(r);
+    if (!call) {
+      // FINAL / direct answer
+      return { final: stripFinalLocal(r), steps };
+    }
+
+    const res = await runToolLocal(call).catch(() => ({
+      tool: call.tool,
+      input: call.input,
+      output: "ERROR: tool nahi chala",
+      ok: false,
+    }));
+    steps.push({ tool: res.tool, ok: res.ok });
+    onStep?.({ tool: res.tool, ok: res.ok });
+
+    msgs.push({ role: "assistant", content: r });
+    msgs.push({
+      role: "user",
+      content: `OBSERVATION (${res.tool}):\n${String(res.output).slice(0, 3000)}\n\nAb faisla karo: koi aur tool chahiye, ya FINAL jawab de sakte ho?`,
+    });
+  }
+
+  // Steps chal chuke hain, FINAL nahi mila — seedha jawab maango
+  try {
+    const r = await Promise.race([
+      chatOllama(cfg, {
+        system: sys + "\n\nAnswer the user directly now. No tools, no protocol — just the answer.",
+        messages: msgs,
+        signal: AbortSignal.timeout(15000),
+      }),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 15000)),
+    ]);
+    if (r && r.trim().length > 10) return { final: stripFinalLocal(r), steps };
+  } catch {
+    /* null */
+  }
+  return null;
+}
+
+/** 🔒 CORRECTION LEARNING — jab user bataye ke jawab galat tha
+ *  ("wrong", "galat", "yeh nahi", "aapne ghalat kaha"...):
+ *   1. Brain se matching ghalat yaad DELETE
+ *   2. Is turn ki memory skip
+ *  Phir web research force hoti hai aur dobara sahi jawab banta hai.
+ *  Aise hi Nexora apni galtiyon se seekhti hai. */
+async function applyCorrection(text: string): Promise<boolean> {
+  const isCorrection =
+    /\b(wrong|incorrect|galat|ghalat|galt|sahi nahi|theek nahi|nahi hai|nahi hey|jhoot|fake|غلط)\b/i.test(
+      text,
+    ) &&
+    /\b(answer|jawab|kaha|bata(ya|o)?|aapne|tumne|yeh|ye|woh|name|naam|founder|president|ceo|company|firma)\b/i.test(
+      text,
+    );
+  if (!isCorrection) return false;
+
+  // Brain se matching entries delete
+  try {
+    const r = await fetch("/api/brain", { credentials: "include" });
+    if (r.ok) {
+      const d = await r.json();
+      const items: { id: number; question: string }[] = d?.items ?? [];
+      const words = new Set(text.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+      const matches = items.filter((it) => {
+        const qw = new Set((it.question || "").toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+        let s = 0;
+        for (const w of words) if (qw.has(w)) s++;
+        return s >= 2;
+      });
+      for (const it of matches) {
+        await fetch(`/api/brain?id=${it.id}`, { method: "DELETE", credentials: "include" }).catch(() => {});
+      }
+    }
+  } catch {
+    /* guest ya network — skip */
+  }
+  return true;
 }
 
 /** Nexora Brain me achha jawab save karo — agli baar 0ms. Guest = skip. */
@@ -390,6 +545,44 @@ export function ChatView({
 
         publish(); // pehli frame — spinner turant dikhe, event ka intezaar nahi
 
+        // ── LOCAL-FIRST DEEP: Ollama + TOOLS (ReAct, 100% local) ──
+        // Cloud /api/think ki jagah — jab Ollama ho to poora agent loop
+        // BROWSER me chalta hai: model tools maangta hai (web_search,
+        // read_url, run_code, recall), hum chalate hain, natija wapas
+        // dete hain. Private, free, internet band ho to bhi. Fail →
+        // cloud /api/think fallback.
+        let finalText = "";
+        let who = "";
+        let localDeepFinal = "";
+        if (isDeep && (await ollamaReachable(ollama))) {
+          const agent = await localAgentRun({
+            cfg: ollama,
+            system: systemPrompt(personality),
+            task: userText,
+            history,
+            maxSteps: 5,
+            onStep: (s) => {
+              const label =
+                s.tool === "web_search" ? "Searched the web"
+                : s.tool === "read_url" ? "Read a page"
+                : s.tool === "run_code" ? "Ran the code"
+                : s.tool === "recall" ? "Checked knowledge"
+                : (s.tool ?? "step");
+              addStep(`step-${trace.steps.length}-${s.tool ?? "x"}`, label);
+              trace.phase = "agents";
+              publish();
+            },
+          });
+          if (agent?.final && agent.final.trim().length > 20) {
+            localDeepFinal = agent.final;
+            who = hideModelName(ollama.model) || "Local AI";
+          } else {
+            addStep("retry", "Local agent fail — cloud le raha hai");
+            publish();
+          }
+        }
+
+        if (!localDeepFinal) {
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -400,8 +593,6 @@ export function ChatView({
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = "";
-        let finalText = "";
-        let who = "";
 
         for (;;) {
           const { done, value } = await reader.read();
@@ -495,16 +686,19 @@ export function ChatView({
             }
           }
         }
+        } // end: cloud stream (jab localDeepFinal na ho)
+
+        if (localDeepFinal) finalText = localDeepFinal;
 
         if (finalText) {
           for (const a of trace.agents) if (a.status === "running") a.status = "done";
           for (const s of trace.steps) s.status = "done";
           // aakhri qadam: local master — naam UI pe nahi
-          if (ollamaReady(ollama)) {
+          if (!localDeepFinal && ollamaReady(ollama)) {
             addStep("master", "Writing final answer");
             publish();
           }
-          const polished = await polishLocal(finalText);
+          const polished = localDeepFinal ? finalText : await polishLocal(finalText);
           for (const s of trace.steps) s.status = "done";
           const snap: TraceState = {
             ...trace,
@@ -556,14 +750,56 @@ export function ChatView({
         : ollama;
 
       const triage = await localTriage(fastCfg, userText);
-      const needWeb = web || (triage?.web ?? needsResearch(userText));
+
+      // 🔒 CORRECTION LEARNING — user ne bataya jawab galat tha:
+      // brain se ghalat yaad delete, memory skip, web FORCE.
+      const corrected = await applyCorrection(userText);
+      const skipMem = corrected;
+
+      const needWeb = web || corrected || (triage?.web ?? needsResearch(userText));
       const isCode =
         triage?.mode === "code" ||
         /\b(code|function|bug|error|javascript|python|react|api|html|css|sql|typescript)\b/i.test(userText);
       const complex = triage?.mode === "complex";
+      // 🔒 FACTUAL/ENTITY sawal ("who is founder of X", "X ka CEO kaun")
+      // — in par web se VERIFY zaroori, warna hallucination ka dar.
+      const factualQ =
+        /\b(who is|who was|what is|what are|which|where|when|founder|ceo|president|prime minister|capital|invented|discovered|born|established|founded|established|banned|fined|headquarter)\b/i.test(
+          userText,
+        );
 
       let localAnswer = "";
       let good = false;
+
+      // ── CONTEXT COMPRESSION (naya): lambi chat me purani baatein
+      // fast model se summarize — context window bachta hai, model
+      // behtar yaad rakhta hai. (8+ messages par hi.)
+      let ladderHistory: ChatTurn[] = history;
+      if (history.length > 8) {
+        const keep = history.slice(-6);
+        const older = history
+          .slice(0, -6)
+          .map((m) => `${m.role === "user" ? "U" : "A"}: ${m.content}`)
+          .join("\n")
+          .slice(0, 5000);
+        try {
+          const sum = await Promise.race([
+            chatOllama(fastCfg, {
+              system:
+                "Summarize this chat history into a short context block. Keep every fact, name, number and decision. Reply with only the summary.",
+              messages: [{ role: "user", content: older }],
+              signal: AbortSignal.timeout(10000),
+            }),
+            new Promise<string>((resolve) => setTimeout(() => resolve(""), 10000)),
+          ]);
+          if (sum && sum.trim().length > 20) {
+            ladderHistory = [{ role: "user", content: `[Earlier conversation summary]\n${sum.trim()}` }, ...keep];
+          }
+        } catch {
+          /* purana history hi rakho */
+        }
+      }
+
       const runLocal = async (sys: string): Promise<boolean> => {
         try {
           let ok = false;
@@ -571,7 +807,7 @@ export function ChatView({
             bestCfg,
             {
               system: sys,
-              messages: [...history, { role: "user", content: userText }],
+              messages: [...ladderHistory, { role: "user", content: userText }],
               signal: AbortSignal.timeout(30_000),
             },
             (partial) => {
@@ -598,17 +834,19 @@ export function ChatView({
       };
 
       if (!complex) {
-        // L1 — direct local (memory ke saath)
-        let sys = systemPrompt(personality) + (await memoryForOllama(userText));
+        // L1 — direct local (memory ke saath; correction par memory skip)
+        let sys = systemPrompt(personality) + (skipMem ? "" : await memoryForOllama(userText));
         if (!needWeb) good = await runLocal(sys);
 
         // L2 — local + LIVE WEB (jab web chahiye ya L1 na chal saka)
-        if ((needWeb || !good) && !cancelRef.current) {
+        // 🔒 factual sawal par L1 skip — seedha web ke saath jawab,
+        // taake model training se guess na kare.
+        if (((needWeb || !good) && !cancelRef.current) || (factualQ && !good)) {
           patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
           sys =
             systemPrompt(personality) +
             (await researchForOllama(userText)) +
-            (await memoryForOllama(userText));
+            (skipMem ? "" : await memoryForOllama(userText));
           good = await runLocal(sys);
         }
 
@@ -667,8 +905,38 @@ export function ChatView({
           patchMessage(convId, assistantId, { thinking: [] });
         }
 
-        // 🧠 YAAD — achha local jawab Nexora Brain me save (agli baar 0ms)
-        if (good && !cancelRef.current) {
+        // 🔒 FACT-CHECK — factual/entity sawal par web se verify:
+        // research mojood ho to answer ke key words us me honne chahiye.
+        // Match na ho to IMANDARI se batate hain (guess ko sach nahi
+        // kehte) aur brain me SAVE bhi nahi karte (warna wohi ghalat
+        // yaad agli baar repeat hogi — bilkul FLEEK wala masla).
+        let verified = !factualQ;
+        let verifyNote = "";
+        if (good && factualQ && !cancelRef.current) {
+          patchMessage(convId, assistantId, { thinking: ["Web se verify kar raha hai…"] });
+          const check = await researchForOllama(userText);
+          const researchTxt = check.toLowerCase();
+          const hasResults = researchTxt.includes("web research");
+          const keyWords = finalText
+            .toLowerCase()
+            .split(/\W+/)
+            .filter((w) => w.length > 4)
+            .slice(0, 12);
+          const hits = keyWords.filter((k) => researchTxt.includes(k)).length;
+          verified = hasResults && hits >= 2;
+          if (!verified) {
+            verifyNote =
+              "\n\n---\n*⚠️ **Imandari se**: ye jawab live web search se confirm NAHI hua — " +
+              "ho sakta hai ye purani ya ghalat maloomat ho. Zyada tehqeeq ke liye " +
+              "web search ON karke dobara poochein, ya kisi trusted source se check karein.*";
+            patchMessage(convId, assistantId, { thinking: [] });
+          } else {
+            patchMessage(convId, assistantId, { thinking: ["✅ Web se confirm"] });
+          }
+        }
+
+        // 🧠 YAAD — achha jawab save (sirf verified ya non-factual)
+        if (good && verified && !cancelRef.current) {
           const saved = await saveBrain(userText, finalText);
           if (saved) {
             memoryNote =
@@ -681,7 +949,7 @@ export function ChatView({
             agents: needWeb ? "Local AI + Web" : isCode ? "Local AI + Verify" : "Local AI + Review",
             orchestrator: hideModelName(ollama.model) || "Ollama",
           });
-          patchMessage(convId, assistantId, { content: finalText + memoryNote, streaming: false });
+          patchMessage(convId, assistantId, { content: finalText + verifyNote + memoryNote, streaming: false });
           setLocalStream(false);
           return;
         }
