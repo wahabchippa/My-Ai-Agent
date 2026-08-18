@@ -30,8 +30,6 @@ async function pollinationsImage(prompt: string): Promise<string> {
   return url;
 }
 
-const LS = "nexora-studio-v1";
-
 function loadItems(): Item[] {
   try {
     const raw = localStorage.getItem(LS);
