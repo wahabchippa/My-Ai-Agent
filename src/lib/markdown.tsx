@@ -71,16 +71,26 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
     } else if (tok.startsWith("[")) {
       const m = tok.match(/\[([^\]]+)\]\(([^)]+)\)/);
       if (m) {
+        // 🔒 FIX (final review): href me sirf http(s) ya relative allowed —
+        // `javascript:`/`data:` links click par XSS kar sakte hain
+        // (images me pehle se check tha, links me nahi).
+        const href = m[2].trim();
+        const safeHref =
+          /^(https?:)?\/\//i.test(href) || href.startsWith("#") || href.startsWith("/");
         nodes.push(
-          <a
-            key={key}
-            href={m[2]}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-coral-hover underline decoration-coral-hover/40 underline-offset-2 hover:decoration-coral-hover"
-          >
-            {m[1]}
-          </a>
+          safeHref ? (
+            <a
+              key={key}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-coral-hover underline decoration-coral-hover/40 underline-offset-2 hover:decoration-coral-hover"
+            >
+              {m[1]}
+            </a>
+          ) : (
+            <span key={key}>{m[1]}</span>
+          )
         );
       }
     } else if (tok.startsWith("*")) {

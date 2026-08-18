@@ -11,6 +11,13 @@ export async function POST(req: Request) {
     const file = formData.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
+    // 🔒 FIX (final review): pehle file size ki koi hadd nahi thi — koi
+    // bhi 2GB file bhej kar server ki memory/CPU kha sakta tha (DoS).
+    const MAX_FILE = 10 * 1024 * 1024; // 10 MB
+    if (file.size > MAX_FILE) {
+      return NextResponse.json({ error: "File too large (max 10 MB)" }, { status: 413 });
+    }
+
     const name = file.name.toLowerCase();
     const buf = Buffer.from(await file.arrayBuffer());
     let text = "";

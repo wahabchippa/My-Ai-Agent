@@ -20,6 +20,7 @@ import { NextRequest } from "next/server";
 import { available, type Entry } from "@/lib/modelRegistry";
 import { callModel } from "@/lib/aiCall";
 import { sanitize } from "@/lib/sanitize";
+import { guardApi } from "@/lib/guard";
 
 export const maxDuration = 60;
 
@@ -109,6 +110,12 @@ RULES:
   files depend on — unless the change is explicitly about renaming them.`;
 
 export async function POST(req: NextRequest) {
+  // ── AUTH GATE (guest per-IP limit) — /api/build ke sath consistency ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return Response.json({ ok: false, error: guard.error }, { status: guard.status });
+  }
+
   const t0 = Date.now();
   let body: Record<string, unknown>;
   try {
