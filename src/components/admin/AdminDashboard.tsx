@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { UsersIcon, CreditCardIcon, BarChartIcon, ActivityIcon, SettingsIcon, ShieldIcon, ClipboardIcon, DatabaseIcon, RefreshIcon, SearchIcon, ChevronDownIcon, CheckIcon, CloseIcon, EditIcon, TrashIcon } from "../ui/icons";
+import { UsersIcon, CreditCardIcon, BarChartIcon, ActivityIcon, SettingsIcon, ShieldIcon, ClipboardIcon, DatabaseIcon, RefreshIcon, SearchIcon } from "../ui/icons";
 import { cn } from "@/utils/cn";
 
 // ═══════════════════════════════════════════
@@ -70,9 +70,9 @@ export function AdminDashboard({ email }: { email: string }) {
         <div className="mx-auto max-w-7xl">
           {tab === "overview" && <OverviewTab email={email} />}
           {tab === "users" && <UsersTab email={email} />}
-          {tab === "models" && <ModelsTab email={email} />}
-          {tab === "settings" && <SettingsTab email={email} />}
-          {tab === "audit" && <AuditTab email={email} />}
+          {tab === "models" && <ModelsTab />}
+          {tab === "settings" && <SettingsTab />}
+          {tab === "audit" && <AuditTab />}
         </div>
       </div>
     </div>
@@ -427,7 +427,7 @@ function UsersTab({ email }: { email: string }) {
 // ═══════════════════════════════════════════
 // PLACEHOLDER TABS
 // ═══════════════════════════════════════════
-function ModelsTab({ email }: { email: string }) {
+function ModelsTab() {
   return (
     <div className="text-center py-20">
       <div className="text-4xl mb-4">🤖</div>
@@ -437,7 +437,7 @@ function ModelsTab({ email }: { email: string }) {
   );
 }
 
-function SettingsTab({ email }: { email: string }) {
+function SettingsTab() {
   return (
     <div className="text-center py-20">
       <div className="text-4xl mb-4">⚙️</div>
@@ -447,7 +447,7 @@ function SettingsTab({ email }: { email: string }) {
   );
 }
 
-function AuditTab({ email }: { email: string }) {
+function AuditTab() {
   return (
     <div className="text-center py-20">
       <div className="text-4xl mb-4">📋</div>

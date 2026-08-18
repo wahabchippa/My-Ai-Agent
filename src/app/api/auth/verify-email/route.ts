@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     
     // Resend verification email
     if (action === "resend" && email) {
-      const result = await resendVerificationEmail(email);
+      await resendVerificationEmail(email);
       return NextResponse.json({ 
         success: true, 
         message: "If an account exists, a verification email has been sent." 

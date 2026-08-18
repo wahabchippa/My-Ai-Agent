@@ -10,16 +10,10 @@ type AuthView = "login" | "signup" | "forgot-password";
 export function AuthScreen() {
   const [view, setView] = useState<AuthView>("login");
 
-  const handleSuccess = () => {
-    // Refresh page to load authenticated state
-    window.location.reload();
-  };
-
   switch (view) {
     case "signup":
       return (
         <SignupScreen
-          onSuccess={handleSuccess}
           onSwitchToLogin={() => setView("login")}
         />
       );
@@ -32,7 +26,6 @@ export function AuthScreen() {
     default:
       return (
         <LoginScreen
-          onSuccess={handleSuccess}
           onSwitchToSignup={() => setView("signup")}
           onSwitchToForgotPassword={() => setView("forgot-password")}
         />

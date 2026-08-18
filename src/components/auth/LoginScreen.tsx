@@ -4,15 +4,13 @@ import { useState, useEffect } from "react";
 import { AuthLayout } from "./AuthLayout";
 import { MailIcon, LockIcon, EyeIcon, EyeOffIcon, CheckIcon, AlertIcon } from "../ui/icons";
 import { cn } from "@/utils/cn";
-import type { AppUser } from "@/lib/useAuth";
 
 interface LoginScreenProps {
-  onSuccess?: (user: AppUser) => void;
   onSwitchToSignup?: () => void;
   onSwitchToForgotPassword?: () => void;
 }
 
-export function LoginScreen({ onSuccess, onSwitchToSignup, onSwitchToForgotPassword }: LoginScreenProps) {
+export function LoginScreen({ onSwitchToSignup, onSwitchToForgotPassword }: LoginScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, integer, jsonb, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer, numeric } from "drizzle-orm/pg-core";
 
 // ═══════════════════════════════════════════
 // USERS — full auth support

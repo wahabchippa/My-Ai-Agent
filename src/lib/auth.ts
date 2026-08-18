@@ -49,7 +49,6 @@ const MAX_ATTEMPTS_PER_WINDOW = 10;
 
 // Password requirements
 const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
 
 // ═══════════════════════════════════════════
 // PASSWORD UTILITIES
@@ -231,10 +230,6 @@ export async function createUser(data: {
   
   // Hash password
   const passwordHash = await hashPassword(data.password);
-  
-  // Generate verification token
-  const verifyToken = generateSecureToken();
-  const verifyExpires = new Date(Date.now() + VERIFY_TOKEN_EXPIRY);
   
   // Create user — auto-activated (email verification is optional/future)
   const [newUser] = await db.insert(users).values({

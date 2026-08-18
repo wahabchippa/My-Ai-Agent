@@ -3,7 +3,7 @@
 
 import { db } from "@/db";
 import { users, sessions, plans, usageLogs, auditLogs } from "@/db/schema";
-import { eq, sql, and, gte, desc } from "drizzle-orm";
+import { eq, sql, and, gte } from "drizzle-orm";
 import { createHash } from "crypto";
 
 export interface AuthUser {

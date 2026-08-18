@@ -11,7 +11,6 @@ import { WorkspaceView } from "./components/WorkspaceView";
 import { SettingsView } from "./components/SettingsView";
 import { StudioView } from "./components/StudioView";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
-import { cn } from "./utils/cn";
 
 export type ViewType = "chat" | "workspace" | "studio" | "admin" | "settings";
 

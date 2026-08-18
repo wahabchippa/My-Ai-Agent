@@ -730,6 +730,9 @@ export function ChatView({
                   onOpenArtifact={(a) =>
                     setArtifact({ id: newId(), ...a })
                   }
+                  // 🔒 FIX: pehle handleEdit yahan pass hi nahi hota tha —
+                  // edit button kabhi dikhta hi nahi tha (dead feature).
+                  onEdit={handleEdit}
                 />
               ))}
               <div className="h-2" />
@@ -747,7 +750,6 @@ export function ChatView({
                 web={web}
                 onWebChange={setWeb}
                 prefill={prefill}
-                onPrefillUsed={() => setPrefill(null)}
               />
               <p className="mt-2 text-center text-[11px] text-muted-2">
                 Nexora can make mistakes. Responses come from real models via

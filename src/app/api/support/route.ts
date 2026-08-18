@@ -11,7 +11,6 @@ export async function GET(req: Request) {
   const user = await getUser(req);
   if (!user || !db) return NextResponse.json({ tickets: [] });
 
-  const url = new URL(req.url);
   const isAdmin = requireAdmin(user);
 
   if (isAdmin) {

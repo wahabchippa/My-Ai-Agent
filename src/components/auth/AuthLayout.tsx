@@ -11,11 +11,9 @@ const features = [
 
 interface AuthLayoutProps {
   children: React.ReactNode;
-  title?: string;
-  subtitle?: string;
 }
 
-export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
+export function AuthLayout({ children }: AuthLayoutProps) {
   return (
     <div className="flex min-h-screen w-full bg-void">
       {/* Left: Branding (desktop) */}

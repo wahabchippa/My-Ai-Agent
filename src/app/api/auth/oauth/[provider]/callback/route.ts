@@ -91,7 +91,7 @@ export async function GET(
       return redirectWithError("Failed to create or find your account. Please try again.");
     }
 
-    const { user, isNew } = result;
+    const { user } = result;
 
     // ── Check account status ──
     if (user.status === "suspended") {

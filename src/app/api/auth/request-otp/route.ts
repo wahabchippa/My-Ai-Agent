@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { otpCodes } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { randomInt } from "crypto";
 
 export const dynamic = "force-dynamic";

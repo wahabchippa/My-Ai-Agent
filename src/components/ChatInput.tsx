@@ -17,7 +17,6 @@ export function ChatInput({
   placeholder = "How can I help you today?",
   compact = false,
   prefill,
-  onPrefillUsed,
 }: {
   onSend: (text: string) => void;
   onStop?: () => void;
@@ -30,7 +29,6 @@ export function ChatInput({
   onWebChange?: (b: boolean) => void;
   /** pencil se wapas input me */
   prefill?: string | null;
-  onPrefillUsed?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [seenPrefill, setSeenPrefill] = useState<string | null>(null);

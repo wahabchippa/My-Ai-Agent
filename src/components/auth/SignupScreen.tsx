@@ -6,11 +6,10 @@ import { UserIcon, MailIcon, LockIcon, EyeIcon, EyeOffIcon, CheckIcon, AlertIcon
 import { cn } from "@/utils/cn";
 
 interface SignupScreenProps {
-  onSuccess?: () => void;
   onSwitchToLogin?: () => void;
 }
 
-export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) {
+export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +17,6 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
 
   // Password strength check
   const passwordChecks = {
@@ -71,32 +69,8 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
     }
   };
 
-  if (success) {
-    return (
-      <AuthLayout>
-        <div className="rounded-2xl border border-border bg-surface p-8 shadow-lg text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success-soft text-success">
-              <MailIcon size={32} />
-            </div>
-          </div>
-          <h1 className="text-xl font-bold text-text mb-2">Check your email</h1>
-          <p className="text-sm text-text-secondary mb-6">
-            We&apos;ve sent a verification link to <strong className="text-text">{email}</strong>.
-            Click the link to verify your account.
-          </p>
-          <button onClick={onSwitchToLogin} className="btn btn-primary w-full">
-            Back to login
-          </button>
-          <p className="mt-4 text-xs text-text-muted">
-            Didn&apos;t receive the email? Check your spam folder or{" "}
-            <button className="text-accent hover:underline">resend</button>
-          </p>
-        </div>
-      </AuthLayout>
-    );
-  }
-
+  // 🔒 setSuccess kabhi call hota hi nahi tha — ye poora "Check your email"
+  // screen unreachable dead code tha. Hata diya (signup reload karta hai).
   return (
     <AuthLayout>
       <div className="rounded-2xl border border-border bg-surface p-8 shadow-lg">

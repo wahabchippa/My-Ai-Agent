@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, auditLogs } from "@/db/schema";
+import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getUser, requireAdmin, logAudit } from "@/lib/accessControl";
 
@@ -18,7 +18,6 @@ export async function GET(req: Request) {
   const search = url.searchParams.get("search") || "";
   const planFilter = url.searchParams.get("plan") || "";
 
-  let query = db.select().from(users);
   // Simple filtering
   const allUsers = await db.select().from(users).orderBy(users.createdAt);
   

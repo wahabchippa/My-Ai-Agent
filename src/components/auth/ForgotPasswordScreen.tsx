@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { AuthLayout } from "./AuthLayout";
 import { MailIcon, ArrowUpIcon, CheckCircleIcon } from "../ui/icons";
-import { cn } from "@/utils/cn";
 
 interface ForgotPasswordScreenProps {
   onSwitchToLogin?: () => void;
@@ -21,7 +20,7 @@ export function ForgotPasswordScreen({ onSwitchToLogin }: ForgotPasswordScreenPr
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/forgot-password", {
+      await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

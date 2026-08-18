@@ -5,7 +5,6 @@ import {
   detectLang,
   phrase,
   pickJoke,
-  buildIntro,
   type Lang,
 } from "./i18n";
 import {

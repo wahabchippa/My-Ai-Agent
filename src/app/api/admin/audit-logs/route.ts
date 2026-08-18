@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { auditLogs, users } from "@/db/schema";
-import { eq, sql, desc, like, or } from "drizzle-orm";
+import { eq, sql, desc } from "drizzle-orm";
 import { getUser, requireAdmin } from "@/lib/accessControl";
 
 export const dynamic = "force-dynamic";
