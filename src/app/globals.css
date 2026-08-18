@@ -924,6 +924,32 @@ code:not(pre code) {
   animation: slide-up 0.3s ease-out;
 }
 
+/* ─── Agent chip (Deep/Agents loading) ─── */
+@keyframes chip-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+@keyframes chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--chip, #d97757) 35%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--chip, #d97757) 0%, transparent); }
+}
+.agent-chip-run {
+  position: relative;
+  overflow: hidden;
+  animation: chip-pulse 1.6s ease-in-out infinite;
+}
+.agent-chip-run::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+  animation: chip-shimmer 1.35s ease-in-out infinite;
+  pointer-events: none;
+}
+.dark .agent-chip-run::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.14) 50%, transparent 100%);
+}
+
 /* ─── Resizable Panels ─── */
 .resize-handle {
   position: absolute;

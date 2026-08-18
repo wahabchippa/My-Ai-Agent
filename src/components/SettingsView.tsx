@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "../utils/cn";
+import { useStore } from "../lib/store";
+import { testOllama, DEFAULT_OLLAMA } from "../lib/ollama";
 
 interface Props {
   onOpenSidebar?: () => void;
 }
 
 export function SettingsView({ onOpenSidebar }: Props) {
+  const { ollama, setOllama } = useStore();
   const [user, setUser] = useState<any>(null);
   const [theme, setTheme] = useState<string>("light");
+  const [ollamaTest, setOllamaTest] = useState<"idle" | "ping" | "ok" | "fail">("idle");
+  const [ollamaMsg, setOllamaMsg] = useState("");
+  const [foundModels, setFoundModels] = useState<string[]>([]);
   // Nexora Brain — user ko dikhna chahiye ke yaadasht me kya hai, aur
   // ghalat yaad mitane ka raasta bhi ho. Warna wo "jadoo ka dabba" hai.
   const [brain, setBrain] = useState<{
@@ -64,6 +70,138 @@ export function SettingsView({ onOpenSidebar }: Props) {
 
       <div className="flex-1 overflow-auto px-3 pb-4 sm:px-5">
         <div className="max-w-xl space-y-4">
+          {/* Local Qwen — browser se seedha Ollama */}
+          <div className="rounded-xl border border-line bg-cream-surface p-4 dark:border-night-surface dark:bg-night-surface">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-ink dark:text-cream">🦙 Local Qwen</span>
+                <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10.5px] font-medium text-violet-600 dark:text-violet-400">
+                  Ollama
+                </span>
+              </div>
+              <button
+                onClick={() => setOllama({ ...ollama, enabled: !ollama.enabled })}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-semibold transition",
+                  ollama.enabled ? "bg-emerald-500 text-white" : "bg-cream-deep text-muted dark:bg-night-deep",
+                )}
+              >
+                {ollama.enabled ? "ON" : "OFF"}
+              </button>
+            </div>
+            <p className="mb-3 mt-1.5 text-xs text-muted">
+              Jugaad: pehle <code className="text-[11px]">localhost:11434</code> —
+              Ollama app tray me chalti rahe, terminal band karo koi masla nahi.
+              Sirf local Qwen, koi doosra model nahi.
+            </p>
+
+            <label className="mb-2 block text-[11px] font-medium text-muted">Local URL (terminal nahi chahiye)</label>
+            <input
+              value={ollama.baseUrl}
+              onChange={(e) => setOllama({ ...ollama, baseUrl: e.target.value })}
+              placeholder="http://localhost:11434/v1"
+              className="mb-2 w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
+            />
+
+            <label className="mb-1 block text-[11px] font-medium text-muted">Backup tunnel (optional)</label>
+            <input
+              value={ollama.fallbackUrl ?? ""}
+              onChange={(e) => setOllama({ ...ollama, fallbackUrl: e.target.value })}
+              placeholder="https://….trycloudflare.com/v1"
+              className="mb-2 w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
+            />
+
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-muted">API Key</label>
+                <input
+                  value={ollama.apiKey}
+                  onChange={(e) => setOllama({ ...ollama, apiKey: e.target.value })}
+                  placeholder="ollama"
+                  className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-muted">Model</label>
+                <input
+                  value={ollama.model}
+                  onChange={(e) => setOllama({ ...ollama, model: e.target.value })}
+                  placeholder="qwen"
+                  className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
+                />
+              </div>
+            </div>
+
+            {foundModels.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {foundModels.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setOllama({ ...ollama, model: m })}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[11px] transition",
+                      ollama.model === m
+                        ? "bg-violet-500 text-white"
+                        : "bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400",
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={async () => {
+                  setOllamaTest("ping");
+                  setOllamaMsg("");
+                  const r = await testOllama(ollama);
+                  if (r.ok) {
+                    setOllamaTest("ok");
+                    setFoundModels(r.models);
+                    setOllamaMsg(
+                      r.models.length
+                        ? `Connected · ${r.models.length} models · ${r.via}`
+                        : `Connected · ${r.via}`,
+                    );
+                    // list me qwen jaisa naam ho to usay chun lo
+                    const qwen = r.models.find((m) => /qwen/i.test(m));
+                    if (qwen && !r.models.includes(ollama.model)) setOllama({ ...ollama, model: qwen });
+                  } else {
+                    setOllamaTest("fail");
+                    setOllamaMsg(r.error);
+                  }
+                }}
+                disabled={ollamaTest === "ping"}
+                className="rounded-lg bg-coral px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-coral-hover disabled:opacity-60"
+              >
+                {ollamaTest === "ping" ? "Checking…" : "Test connection"}
+              </button>
+              <button
+                onClick={() => {
+                  setOllama({ ...DEFAULT_OLLAMA });
+                  setOllamaTest("idle");
+                  setOllamaMsg("");
+                }}
+                className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-medium text-ink-soft transition hover:border-coral/40 dark:border-night-deep dark:text-cream/80"
+              >
+                Reset defaults
+              </button>
+              {ollamaMsg && (
+                <span
+                  className={cn(
+                    "text-[11.5px]",
+                    ollamaTest === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500",
+                  )}
+                >
+                  {ollamaTest === "ok" ? "✓ " : "✕ "}
+                  {ollamaMsg}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Nexora Brain */}
           <div className="rounded-xl border border-line bg-cream-surface p-4 dark:border-night-surface dark:bg-night-surface">
             <div className="flex items-center gap-2">

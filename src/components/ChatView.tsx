@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore, newId } from "../lib/store";
+import { useStore, newId, type TraceAgent, type TraceState } from "../lib/store";
 import { generateReply, tokenize, type ChatTurn, type BrainResult } from "../lib/brain";
 import { getModel } from "../lib/models";
 import type { ModelId } from "../lib/models";
@@ -7,6 +7,7 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
+import { chatOllamaStream, ollamaReady, explainOllama } from "../lib/ollama";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
@@ -106,9 +107,11 @@ export function ChatView({
     personality,
     apiKeys,
     activeSlot,
+    ollama,
   } = useStore();
 
   const cancelRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [localStream, setLocalStream] = useState(false);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
@@ -142,7 +145,7 @@ export function ChatView({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length, lastMsg?.content, lastMsg?.streaming]);
+  }, [messages.length, lastMsg?.content, lastMsg?.streaming, lastMsg?.thinking, lastMsg?.trace]);
 
   // close the live preview when switching conversations
   useEffect(() => {
@@ -163,8 +166,53 @@ export function ChatView({
     mdl: ModelId
   ) => {
     cancelRef.current = false;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLocalStream(true);
     const m = getModel(mdl);
+
+    // ─── LOCAL QWEN (Ollama) — sirf yahi, koi doosra model nahi ───
+    // Terminal band = Qwen band. Cloud/master/agents par NAHI girna.
+    if (ollamaReady(ollama)) {
+      try {
+        patchMessage(convId, assistantId, { thinking: [`Qwen · ${ollama.model}`] });
+        const full = await chatOllamaStream(
+          ollama,
+          {
+            system: systemPrompt(personality),
+            messages: [...history, { role: "user", content: userText }],
+            signal: ac.signal,
+          },
+          (partial) => {
+            if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial, thinking: [] });
+          },
+        );
+        if (!cancelRef.current) {
+          patchMessage(convId, assistantId, { content: full, thinking: undefined, streaming: false });
+          setPipelineInfo({ agents: `Qwen (${ollama.model})`, orchestrator: "local Ollama" });
+        } else {
+          patchMessage(convId, assistantId, { streaming: false });
+        }
+        setLocalStream(false);
+        return;
+      } catch (e) {
+        if (cancelRef.current || (e instanceof DOMException && e.name === "AbortError")) {
+          patchMessage(convId, assistantId, { streaming: false });
+          setLocalStream(false);
+          return;
+        }
+        patchMessage(convId, assistantId, {
+          content:
+            `⚠️ **Local Qwen band hai** — ${explainOllama(e)}\n\n` +
+            `Doosra model nahi chalega. Ollama app (llama icon) tray me chalu rakho — terminal ki zaroorat nahi.`,
+          thinking: undefined,
+          streaming: false,
+        });
+        setLocalStream(false);
+        return;
+      }
+    }
 
     // ─── DEEP THINK / AGENTS ───
     // Pehle ye alag tabs me the aur user ko poochna parta tha "kaunsa
@@ -180,6 +228,65 @@ export function ChatView({
           ? { task: userText, maxSteps: 5, messages: [...history, { role: "user", content: userText }] }
           : { task: userText, messages: [...history, { role: "user", content: userText }] };
 
+        // Structured trace — retry par naya line nahi, sirf status badalta hai.
+        const trace: TraceState = {
+          kind: isDeep ? "deep" : "agents",
+          agents: [],
+          steps: [],
+          phase: "start",
+        };
+
+        const headlineOf = (t: TraceState) => {
+          const run = t.agents.filter((a) => a.status === "running");
+          if (run.length) return run.map((a) => a.name).join(" · ");
+          if (t.phase === "research") return "Gathering sources";
+          if (t.phase === "synthesis") return "Synthesizing";
+          if (t.phase === "verify") return "Verifying code";
+          const live = t.steps.find((s) => s.status === "running");
+          if (live) return live.label;
+          return isDeep ? "Deep Think" : "Assembling team";
+        };
+
+        const publish = () => {
+          const snap: TraceState = {
+            ...trace,
+            agents: trace.agents.map((a) => ({ ...a })),
+            steps: trace.steps.map((s) => ({ ...s })),
+          };
+          const head = headlineOf(snap);
+          setLiveSteps([head]);
+          patchMessage(convId, assistantId, { thinking: [head], trace: snap });
+        };
+
+        const addStep = (id: string, label: string) => {
+          const ex = trace.steps.find((s) => s.id === id);
+          if (ex) {
+            ex.status = "running";
+            return;
+          }
+          for (const s of trace.steps) if (s.status === "running") s.status = "done";
+          trace.steps.push({ id, label, status: "running" });
+        };
+
+        const upsertAgent = (partial: Partial<TraceAgent> & { id: string; name: string }) => {
+          const i = trace.agents.findIndex((a) => a.id === partial.id || a.name === partial.name);
+          if (i >= 0) {
+            trace.agents[i] = { ...trace.agents[i], ...partial };
+          } else {
+            trace.agents.push({
+              id: partial.id,
+              name: partial.name,
+              emoji: partial.emoji ?? "⚙️",
+              color: partial.color ?? "#D97757",
+              status: partial.status ?? "running",
+              role: partial.role,
+              model: partial.model,
+            });
+          }
+        };
+
+        publish(); // pehli frame — spinner turant dikhe, event ka intezaar nahi
+
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -190,7 +297,6 @@ export function ChatView({
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = "";
-        const steps: string[] = [];
         let finalText = "";
         let who = "";
 
@@ -207,56 +313,116 @@ export function ChatView({
 
             if (ev.type === "start") who = String(ev.model ?? "");
             else if (ev.type === "step") {
-              const st = ev.step as { tool?: string; thought?: string };
+              const st = ev.step as { tool?: string; thought?: string; n?: number };
               const label =
-                st.tool === "web_search" ? "🔎 Searched the web"
-                : st.tool === "read_url" ? "🌐 Read a page"
-                : st.tool === "run_code" ? "▶️ Ran the code"
-                : st.tool === "recall" ? "📚 Checked knowledge"
-                : `⚙️ ${st.tool ?? "step"}`;
-              steps.push(label);
-              setLiveSteps([...steps]);
-              patchMessage(convId, assistantId, { thinking: [...steps] });
+                st.tool === "web_search" ? "Searched the web"
+                : st.tool === "read_url" ? "Read a page"
+                : st.tool === "run_code" ? "Ran the code"
+                : st.tool === "recall" ? "Checked knowledge"
+                : (st.tool ?? "step");
+              addStep(`step-${st.n ?? trace.steps.length}-${st.tool ?? "x"}`, label);
+              trace.phase = "agents";
+              publish();
             } else if (ev.type === "plan") {
-              const team = (ev.team as { emoji: string; name: string }[]) ?? [];
-              steps.push(`👥 Team: ${team.map((t) => `${t.emoji} ${t.name}`).join(" · ")}`);
-              setLiveSteps([...steps]);
-              patchMessage(convId, assistantId, { thinking: [...steps] });
+              const team = (ev.team as { id: string; name: string; role?: string; emoji: string; color: string }[]) ?? [];
+              // poori team ek dafa — pending chips, dobara push nahi
+              trace.agents = team.map((t) => ({
+                id: t.id,
+                name: t.name,
+                role: t.role,
+                emoji: t.emoji,
+                color: t.color,
+                status: "pending" as const,
+              }));
+              trace.phase = "agents";
+              publish();
+            } else if (ev.type === "research") {
+              addStep("research", "Gathering sources");
+              trace.phase = "research";
+              publish();
             } else if (ev.type === "agent:start") {
-              steps.push(`⏳ ${ev.name} working…`);
-              setLiveSteps([...steps]);
-              patchMessage(convId, assistantId, { thinking: [...steps] });
+              // same id dobara aaye (model retry) to sirf running — naya chip nahi
+              upsertAgent({
+                id: String(ev.id ?? ev.name),
+                name: String(ev.name ?? "Agent"),
+                status: "running",
+                model: ev.model ? String(ev.model) : undefined,
+              });
+              trace.phase = "agents";
+              publish();
             } else if (ev.type === "agent:done") {
-              const st = ev.stage as { name: string; ok: boolean };
-              steps[steps.length - 1] = st.ok ? `✅ ${st.name} done` : `⚠️ ${st.name} skipped`;
-              setLiveSteps([...steps]);
-              patchMessage(convId, assistantId, { thinking: [...steps] });
+              const st = ev.stage as {
+                id?: string; name: string; ok: boolean;
+                emoji?: string; color?: string; role?: string; model?: string;
+              };
+              upsertAgent({
+                id: String(st.id ?? st.name),
+                name: st.name,
+                status: st.ok ? "done" : "skipped",
+                emoji: st.emoji,
+                color: st.color,
+                role: st.role,
+                model: st.model,
+              });
+              publish();
+            } else if (ev.type === "synthesis:start") {
+              for (const a of trace.agents) if (a.status === "running") a.status = "done";
+              addStep("synthesis", "Synthesizing answer");
+              trace.phase = "synthesis";
+              publish();
             } else if (ev.type === "verify") {
-              steps.push(ev.status === "passed" ? "✓ Code verified — it runs" : ev.status === "fixed" ? "✓ Code auto-fixed" : "⚠ Code failed the check");
-              setLiveSteps([...steps]);
-              patchMessage(convId, assistantId, { thinking: [...steps] });
+              const status = ev.status as "passed" | "failed" | "fixed";
+              trace.verify = status;
+              trace.phase = "verify";
+              addStep(
+                "verify",
+                status === "passed" ? "Code verified" : status === "fixed" ? "Code auto-fixed" : "Code failed the check",
+              );
+              const vs = trace.steps.find((s) => s.id === "verify");
+              if (vs) vs.status = "done";
+              publish();
+            } else if (ev.type === "retry") {
+              addStep("retry", "Trying another model");
+              publish();
             } else if (ev.type === "done") {
               finalText = String(ev.final ?? "");
               who = String(ev.model ?? ev.synthesizedBy ?? who);
             } else if (ev.type === "error") {
-              throw new Error(String(ev.message));
+              throw new Error(String(ev.message ?? ev.error ?? "pipeline error"));
             }
           }
         }
 
         if (finalText) {
-          patchMessage(convId, assistantId, { content: finalText, thinking: undefined, streaming: false });
-          setPipelineInfo({ agents: who || (isDeep ? "Deep Think" : "Agent team"), orchestrator: steps.join(" · ") });
+          for (const a of trace.agents) if (a.status === "running") a.status = "done";
+          for (const s of trace.steps) s.status = "done";
+          const snap: TraceState = {
+            ...trace,
+            agents: trace.agents.map((a) => ({ ...a })),
+            steps: trace.steps.map((s) => ({ ...s })),
+          };
+          patchMessage(convId, assistantId, {
+            content: finalText,
+            thinking: [isDeep ? "Deep Think" : "Agent team"],
+            trace: snap,
+            streaming: false,
+          });
+          setPipelineInfo({
+            agents: who || (isDeep ? "Deep Think" : snap.agents.map((a) => a.name).join(", ") || "Agent team"),
+            orchestrator: snap.agents.map((a) => a.name).join(" · "),
+          });
           setLiveSteps([]);
           setLocalStream(false);
           return;
         }
         // Kuch na mila to neeche wala aam raasta chal jayega.
         setLiveSteps([]);
+        patchMessage(convId, assistantId, { trace: undefined });
       } catch {
         // Deep/Agents nakaam — chup chaap aam chat par gir jao. User ko
         // khali screen dena sab se bura natija hai.
         setLiveSteps([]);
+        patchMessage(convId, assistantId, { trace: undefined });
       }
     }
 
@@ -464,6 +630,7 @@ export function ChatView({
     patchMessage(activeId, msgs[lastAssistantIdx].id, {
       content: "",
       thinking: [],
+      trace: undefined,
       streaming: true,
       feedback: undefined,
       model: active.model,
@@ -480,6 +647,7 @@ export function ChatView({
 
   const handleStop = () => {
     cancelRef.current = true;
+    abortRef.current?.abort();
   };
 
   const handleFeedback = (msgId: string, v: "up" | "down") => {
@@ -540,6 +708,15 @@ export function ChatView({
             ))}
           </div>
           {/* Agent status indicator */}
+          {ollamaReady(ollama) && (
+            <span
+              className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-600 dark:text-violet-400"
+              title={ollama.baseUrl}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+              Qwen · local
+            </span>
+          )}
           {pipelineInfo && (
             <button
               onClick={() => setShowAgents((s) => !s)}

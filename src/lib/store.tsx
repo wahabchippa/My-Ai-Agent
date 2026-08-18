@@ -12,8 +12,38 @@ import type { ModelId } from "./models";
 import type { PersonalityId } from "./personalities";
 import type { RealConfig, ApiKeys, Provider, KeySlot } from "./realai";
 import { DEFAULT_SLOTS, DEFAULT_ACTIVE_SLOT, slotsToMap } from "./realai";
+import { DEFAULT_OLLAMA, migrateOllama, type OllamaConfig } from "./ollama";
 
 export type Role = "user" | "assistant";
+
+/** Deep/Agents loading — har agent ek hi chip, retry par naya line nahi. */
+export type TraceAgentStatus = "pending" | "running" | "done" | "skipped";
+
+export interface TraceAgent {
+  id: string;
+  name: string;
+  role?: string;
+  emoji: string;
+  color: string;
+  status: TraceAgentStatus;
+  model?: string;
+}
+
+export interface TraceStep {
+  id: string;
+  label: string;
+  status: "running" | "done";
+}
+
+export type TracePhase = "start" | "research" | "agents" | "synthesis" | "verify";
+
+export interface TraceState {
+  kind: "deep" | "agents";
+  agents: TraceAgent[];
+  steps: TraceStep[];
+  phase?: TracePhase;
+  verify?: "passed" | "failed" | "fixed";
+}
 
 export interface Message {
   id: string;
@@ -22,6 +52,8 @@ export interface Message {
   model?: ModelId;
   personality?: PersonalityId;
   thinking?: string[];
+  /** structured Deep/Agents progress — ThinkingTrace isi se chips banata hai */
+  trace?: TraceState;
   ts: number;
   feedback?: "up" | "down";
   streaming?: boolean;
@@ -60,6 +92,8 @@ interface StoreShape {
   activeSlot: string | null;
   mediaKey: string;
   setMediaKey: (k: string) => void;
+  ollama: OllamaConfig;
+  setOllama: (o: OllamaConfig) => void;
   setMode: (m: ChatMode) => void;
   setConversationMode: (id: string, m: ChatMode) => void;
   setModel: (m: ModelId) => void;
@@ -139,6 +173,7 @@ interface Persisted {
   apiKeys: ApiKeys;
   activeSlot: string | null;
   mediaKey?: string;
+  ollama?: OllamaConfig;
   // legacy fields, migrated on load
   realConfig?: RealConfig | null;
   activeProvider?: Provider | null;
@@ -153,6 +188,7 @@ function emptyState(): Persisted {
     apiKeys: slotsToMap(DEFAULT_SLOTS),
     activeSlot: DEFAULT_ACTIVE_SLOT,
     mediaKey: "",
+    ollama: { ...DEFAULT_OLLAMA },
   };
 }
 
@@ -204,6 +240,8 @@ function load(userId: number | null): Persisted {
           apiKeys,
           activeSlot,
           mediaKey: parsed.mediaKey || "",
+          // saved na ho to user ka Qwen default on
+          ollama: migrateOllama(parsed.ollama),
         };
       }
     }
@@ -222,6 +260,7 @@ function load(userId: number | null): Persisted {
     apiKeys: slotsToMap(DEFAULT_SLOTS),
     activeSlot: DEFAULT_ACTIVE_SLOT,
     mediaKey: "",
+    ollama: { ...DEFAULT_OLLAMA },
   };
 }
 
@@ -252,6 +291,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [apiKeys, setApiKeys] = useState<ApiKeys>(data.apiKeys);
   const [activeSlot, setActiveSlotState] = useState<string | null>(data.activeSlot);
   const [mediaKey, setMediaKeyState] = useState<string>(data.mediaKey ?? "");
+  const [ollama, setOllamaState] = useState<OllamaConfig>(migrateOllama(data.ollama));
 
   // ── Kaun login hai? ──────────────────────────────────────────────────
   // Mount par ek dafa. Jawab aane par us user ka apna data load hota hai.
@@ -333,6 +373,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setApiKeys(st.apiKeys);
     setActiveSlotState(st.activeSlot);
     setMediaKeyState(st.mediaKey ?? "");
+    setOllamaState(migrateOllama(st.ollama));
   }
 
   // ── Save: localStorage foran + Neon 2s debounce ──────────────────────
@@ -341,7 +382,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // par chal jayegi.
     if (!hydrated) return;
 
-    const payload: Persisted = { conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey };
+    const payload: Persisted = { conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey, ollama };
 
     // localStorage — is user ki apni key par
     try {
@@ -363,7 +404,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     }, 2000);
     return () => clearTimeout(t);
-  }, [hydrated, userId, conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey]);
+  }, [hydrated, userId, conversations, model, mode, theme, personality, apiKeys, activeSlot, mediaKey, ollama]);
 
   // apply theme class to <html>
   useEffect(() => {
@@ -406,6 +447,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const setActiveSlot = useCallback((id: string | null) => setActiveSlotState(id), []);
   const setMediaKey = useCallback((k: string) => setMediaKeyState(k), []);
+  const setOllama = useCallback((o: OllamaConfig) => setOllamaState(o), []);
   const toggleTheme = useCallback(
     () => setTheme((t) => (t === "light" ? "dark" : "light")),
     []
@@ -515,6 +557,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     activeSlot,
     mediaKey,
     setMediaKey,
+    ollama,
+    setOllama,
     setModel,
     setPersonality: setPersonalityState,
     setSlot,
