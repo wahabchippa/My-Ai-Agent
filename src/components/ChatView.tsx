@@ -236,28 +236,50 @@ async function localAgentRun(opts: {
  *   2. Is turn ki memory skip
  *  Phir web research force hoti hai aur dobara sahi jawab banta hai.
  *  Aise hi Nexora apni galtiyon se seekhti hai. */
-async function applyCorrection(text: string): Promise<boolean> {
+async function applyCorrection(
+  text: string,
+): Promise<{ corrected: boolean; query: string }> {
+  // 🔒 "pucha/poocha" aur "worng" (typo) bhi ab detect hote hain —
+  // pehle ye miss ho jata tha aur correction samajh hi nahi aati thi.
   const isCorrection =
-    /\b(wrong|incorrect|galat|ghalat|galt|sahi nahi|theek nahi|nahi hai|nahi hey|jhoot|fake|غلط)\b/i.test(
+    /\b(wrong|worng|incorrect|galat|ghalat|galt|jhoot|fake|غلط|sahi nahi|theek nahi|nahi hai|nahi hey|nahi bataya|galat jawab|ghalat jawab)\b/i.test(
       text,
     ) &&
-    /\b(answer|jawab|kaha|bata(ya|o)?|aapne|tumne|yeh|ye|woh|name|naam|founder|president|ceo|company|firma)\b/i.test(
-      text,
-    );
-  if (!isCorrection) return false;
+    (text.length < 400 ||
+      /\b(answer|jawab|jaawab|reply|kaha|kehta|kehti|kehte|bola|boli|bata(ya|i|o)?|btaya|pucha|poocha|puchha|poochha|sawaal|question|aapne|tumne|yeh|ye|woh|wala|wali|name|naam|founder|ceo|company|firma|marketplace|asli|real|actual)\b/i.test(
+        text,
+      ));
+  if (!isCorrection) return { corrected: false, query: text };
 
-  // Brain se matching entries delete
+  // Clean query — correction ka shor hatao, asli topic rakho
+  const cleanQuery = text
+    .replace(
+      /\b(wrong|worng|incorrect|galat|ghalat|galt|jhoot|fake|غلط|sahi|theek|nahi|hey|hai|mene|maine|mainey|ka|ki|ke|ko|ne|se|me|mein|aapne|tumne|pucha|poocha|puchha|poochha|batao|bataiye|btao|sawaal|question|answer|jawab|reply|asli|real|actual)\b/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  const query = cleanQuery.length > 3 ? cleanQuery : text;
+
+  // Brain se matching ghalat yaad delete (koi bhi shared word >= 4 chars)
   try {
     const r = await fetch("/api/brain", { credentials: "include" });
     if (r.ok) {
       const d = await r.json();
-      const items: { id: number; question: string }[] = d?.items ?? [];
-      const words = new Set(text.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+      const items: { id: number; question: string; preview?: string }[] = d?.items ?? [];
+      const words = new Set(
+        (query + " " + text).toLowerCase().split(/\W+/).filter((w) => w.length >= 4),
+      );
       const matches = items.filter((it) => {
-        const qw = new Set((it.question || "").toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+        const qw = new Set(
+          ((it.question || "") + " " + (it.preview || ""))
+            .toLowerCase()
+            .split(/\W+/)
+            .filter((w) => w.length >= 4),
+        );
         let s = 0;
         for (const w of words) if (qw.has(w)) s++;
-        return s >= 2;
+        return s >= 1;
       });
       for (const it of matches) {
         await fetch(`/api/brain?id=${it.id}`, { method: "DELETE", credentials: "include" }).catch(() => {});
@@ -266,7 +288,7 @@ async function applyCorrection(text: string): Promise<boolean> {
   } catch {
     /* guest ya network — skip */
   }
-  return true;
+  return { corrected: true, query };
 }
 
 /** Nexora Brain me achha jawab save karo — agli baar 0ms. Guest = skip. */
@@ -753,10 +775,12 @@ export function ChatView({
 
       // 🔒 CORRECTION LEARNING — user ne bataya jawab galat tha:
       // brain se ghalat yaad delete, memory skip, web FORCE.
-      const corrected = await applyCorrection(userText);
+      const correction = await applyCorrection(userText);
+      const corrected = correction.corrected;
+      const correctionQuery = correction.query;
       const skipMem = corrected;
 
-      const needWeb = web || corrected || (triage?.web ?? needsResearch(userText));
+      const needWeb = web || corrected || (triage?.web ?? needsResearch(corrected ? correctionQuery : userText));
       const isCode =
         triage?.mode === "code" ||
         /\b(code|function|bug|error|javascript|python|react|api|html|css|sql|typescript)\b/i.test(userText);
@@ -843,9 +867,43 @@ export function ChatView({
         // taake model training se guess na kare.
         if (((needWeb || !good) && !cancelRef.current) || (factualQ && !good)) {
           patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
+          const researchBlock = await researchForOllama(corrected ? correctionQuery : userText);
+          const researchHasData = researchBlock.includes("[WEB RESEARCH");
+
+          // 🚫 NO-GUESS GUARD (asli "dumb AI" ka ilaj):
+          // Factual sawal par web se kuch NA mila → model ko bolne hi
+          // mat do. Chhote models khali research par bhi apni training
+          // se ghad letay hain (Harrison Hines wala masla). Seedha
+          // imandari ka jawab do — "mujhe nahi pata" ghalat confident
+          // jawab se 100x behtar hai.
+          if (factualQ && !researchHasData && !cancelRef.current) {
+            patchMessage(convId, assistantId, {
+              content:
+                "🤷 **Mujhe is sawal ka verified jawab online nahi mila.**\n\n" +
+                "Main apni training se andaza laga sakta hoon, magar ye ghalat ho sakta hai — " +
+                "is liye main guess nahi kar raha. Is sawal ke liye kisi trusted source " +
+                "(official website, Wikipedia, news) se check kar lein.\n\n" +
+                "*Is liye: koi bhi naam, tareekh ya number jo main abhi bataun wo sirf guess hoga — " +
+                "aur guess karna behtar nahi.*",
+              streaming: false,
+            });
+            setPipelineInfo({
+              agents: "Web search (khali)",
+              orchestrator: hideModelName(ollama.model) || "Ollama",
+            });
+            setLocalStream(false);
+            return;
+          }
+
           sys =
             systemPrompt(personality) +
-            (await researchForOllama(userText)) +
+            (factualQ
+              ? "\n\n⚠️ FACTUAL QUESTION — STRICT RULE: Answer ONLY from the WEB RESEARCH block above. " +
+                "If the answer is not in the research, say plainly: \"mujhe is ka verified jawab nahi mila\". " +
+                "NEVER guess names, dates, numbers or facts from your training. " +
+                "Ek ghalat confident jawab \"mujhe nahi pata\" se 100x bura hai."
+              : "") +
+            researchBlock +
             (skipMem ? "" : await memoryForOllama(userText));
           good = await runLocal(sys);
         }
@@ -914,7 +972,7 @@ export function ChatView({
         let verifyNote = "";
         if (good && factualQ && !cancelRef.current) {
           patchMessage(convId, assistantId, { thinking: ["Web se verify kar raha hai…"] });
-          const check = await researchForOllama(userText);
+          const check = await researchForOllama(corrected ? correctionQuery : userText);
           const researchTxt = check.toLowerCase();
           const hasResults = researchTxt.includes("web research");
           const keyWords = finalText
