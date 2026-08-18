@@ -8,7 +8,7 @@ import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
 import { chatOllamaStream, ollamaReady, ollamaReachable, hideModelName } from "../lib/ollama";
-import { needsResearch } from "../lib/research";
+import { needsResearch, research } from "../lib/research";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
@@ -20,11 +20,57 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // hain kab local bole aur kab cloud (web search + multi-model) support
 // ban jata hai.
 
-/** Kya is sawal ko FRESH data chahiye? (Ollama ki training purani ho
- *  sakti hai) — URL ho, ya current-events keywords hon. */
-function needsFreshData(text: string): boolean {
-  if (/https?:\/\/|\b(?:github|gitlab|npmjs|stackoverflow)\.com\//i.test(text)) return true;
-  return needsResearch(text);
+/** URL ho to CLOUD — webFetch server-side chalti hai (client-safe
+ *  nahi). Baaki fresh-data sawal Ollama + web-search se hote hain. */
+function hasUrlIn(text: string): boolean {
+  return /https?:\/\/|\b(?:github|gitlab|npmjs|stackoverflow)\.com\//i.test(text);
+}
+
+/** Ollama ke liye web research — agar chahiye (web toggle ya current
+ *  events) to live results la kar prompt me inject. 8s cap. */
+async function researchForOllama(text: string): Promise<string> {
+  try {
+    const ctx = await Promise.race([
+      research(text),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 8000)),
+    ]);
+    return ctx.trim() ? `\n\n[WEB RESEARCH — abhi fetch hua, is par apni training se zyada bharosa karo]\n${ctx.trim()}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Ollama ke liye memory — logged-in user ke Nexora Brain se matching
+ *  facts inject karo (existing /api/brain se). 4s cap. */
+async function memoryForOllama(text: string): Promise<string> {
+  try {
+    const mem = await Promise.race([
+      (async () => {
+        const r = await fetch("/api/brain", { credentials: "include" });
+        if (!r.ok) return "";
+        const d = await r.json();
+        const items: { question: string; preview: string }[] = d?.items ?? [];
+        const words = new Set(text.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+        const hits = items
+          .filter((it) => {
+            const qw = new Set((it.question || "").toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+            let score = 0;
+            for (const w of words) if (qw.has(w)) score++;
+            return score >= 2;
+          })
+          .slice(0, 3);
+        if (!hits.length) return "";
+        return (
+          "\n\n[MEMORY — user ke pehle bataye hue facts]\n" +
+          hits.map((h) => `• Q: ${h.question} → ${String(h.preview || "").slice(0, 150)}`).join("\n")
+        );
+      })(),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 4000)),
+    ]);
+    return mem;
+  } catch {
+    return "";
+  }
 }
 
 function greeting() {
@@ -394,18 +440,30 @@ export function ChatView({
 
     // ── OLLAMA-FIRST — LOCAL AI MAIN ENGINE ────────────────────────────
     // Nexora ka asli engine ab LOCAL Ollama hai: free, private, tez.
-    // Cloud models + web search SIRF SUPPORT hain — jab sawal ko fresh
-    // data chahiye (web toggle ON, URL, current events) ya Ollama
-    // jawab na de saka, tabhi cloud aage aata hai.
-    if (!realConfig && !web && !needsFreshData(userText) && (await ollamaReachable(ollama))) {
+    // AUR ab web-search + memory ke saath POWERFUL: current-events ke
+    // sawal par bhi Ollama hi jawab deta hai — live web results aur
+    // user ki pehle-batayi hui baatein is ke prompt me inject hoti
+    // hain. Cloud (multi-model) SIRF tab jab: URL ho, ya Ollama fail/
+    // khali/short jawab de.
+    if (!realConfig && !hasUrlIn(userText) && (await ollamaReachable(ollama))) {
       let localOk = false;
       try {
+        // System prompt me context jama karo: base + web research + memory
+        let sys = systemPrompt(personality);
+        const wantFresh = web || needsResearch(userText);
+        if (wantFresh) {
+          patchMessage(convId, assistantId, { thinking: ["Searching the web…"] });
+          sys += await researchForOllama(userText);
+          patchMessage(convId, assistantId, { thinking: [] });
+        }
+        sys += await memoryForOllama(userText);
+
         await chatOllamaStream(
           ollama,
           {
-            system: systemPrompt(personality),
+            system: sys,
             messages: [...history, { role: "user", content: userText }],
-            signal: AbortSignal.timeout(25_000),
+            signal: AbortSignal.timeout(30_000),
           },
           (partial) => {
             if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial });
@@ -420,7 +478,10 @@ export function ChatView({
               );
             localOk = !junk;
             if (localOk && !cancelRef.current) {
-              setPipelineInfo({ agents: "Local AI", orchestrator: hideModelName(ollama.model) || "Ollama" });
+              setPipelineInfo({
+                agents: wantFresh ? "Local AI + Web" : "Local AI",
+                orchestrator: hideModelName(ollama.model) || "Ollama",
+              });
               patchMessage(convId, assistantId, { content: t, streaming: false });
               setLocalStream(false);
             }
