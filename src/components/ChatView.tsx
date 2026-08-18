@@ -867,7 +867,7 @@ export function ChatView({
       if (!complex && !(factualQ && tinyLocal)) {
         // L1 — direct local (memory ke saath; correction par memory skip)
         // 🔒 factual + tiny model → local ladder skip (guard upar hai)
-        let sys = systemPrompt(personality) + (skipMem ? "" : await memoryForOllama(userText));
+        let sys = systemPrompt(personality) + (skipMem || factualQ ? "" : await memoryForOllama(userText));
         if (!needWeb) good = await runLocal(sys);
 
         // L2 — local + LIVE WEB (jab web chahiye ya L1 na chal saka)
@@ -912,7 +912,7 @@ export function ChatView({
                 "Ek ghalat confident jawab \"mujhe nahi pata\" se 100x bura hai."
               : "") +
             researchBlock +
-            (skipMem ? "" : await memoryForOllama(userText));
+            (skipMem || factualQ ? "" : await memoryForOllama(userText));
           good = await runLocal(sys);
         }
 
@@ -939,7 +939,7 @@ export function ChatView({
               const fixed = await runLocal(
                 systemPrompt(personality) +
                   `\n\nTumhara likha hua code ye error de raha hai:\n${String(vd.error).slice(0, 400)}\n\nSIRF code block dobara likho (fix ke saath).` +
-                  (await memoryForOllama(userText)),
+                  (factualQ ? "" : await memoryForOllama(userText)),
               );
               if (fixed && !cancelRef.current) {
                 patchMessage(convId, assistantId, {

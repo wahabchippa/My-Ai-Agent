@@ -153,6 +153,25 @@ function selectAgents(c: Classification, mode: Mode, pool: Entry[]): Entry[] {
   return diversify(ranked, 5);
 }
 
+/** 🔒 ANSWER GROUNDING CHECK — factual jawab ke asli naam (proper nouns)
+ *  research me maujood hain? Agar answer me capitalized names hain aur
+ *  un me se KOI bhi research me nahi → answer ghadha hua hai.
+ *  (e.g. answer "John Doe" — research me "Abhi Arora" hai → fail) */
+function answerGrounded(answer: string, research: string): boolean {
+  const r = research.toLowerCase();
+  const names = (answer.match(/\b[A-Z][a-z]{2,}(?:\s[A-Z][a-z]{2,})?\b/g) || [])
+    .map((n) => n.toLowerCase());
+  if (!names.length) return true; // koi name nahi = "nahi pata" style = theek
+  let hits = 0;
+  for (const n of names) if (r.includes(n)) hits++;
+  return hits >= 1;
+}
+
+const HONEST_MSG =
+  "🤷 **Mujhe is sawal ka verified jawab online nahi mila.**\n\n" +
+  "Model ka jawab web search se confirm nahi hua, is liye main usay pesh nahi kar raha. " +
+  "Kisi trusted source (official website, Wikipedia, news) se check kar lein.";
+
 export async function POST(req: Request) {
   const t0 = Date.now();
 
@@ -186,6 +205,14 @@ export async function POST(req: Request) {
   const clean = sanitizeMessages(b.messages as Msg[], { aggressive: false });
   const messages: Msg[] = clean.messages;
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+
+  // 🔒 FACTUAL GUARD (server-side): "who is / founder / CEO / where" —
+  // in sawalon par model ko training se guess karne se ROKO. Research
+  // hamesha chalao, aur kuch na mile to jawab hi mat do.
+  const factualQ =
+    /\b(who is|who was|what is|what are|which|where|when|founder|ceo|president|prime minister|capital|invented|discovered|born|established|founded|headquarter|headquartered|owner|company)\b/i.test(
+      lastUser,
+    );
   const mode: Mode = (b.mode as Mode) || "balanced";
 
   // ─── NO-KEY GUARD ───
@@ -223,7 +250,10 @@ export async function POST(req: Request) {
   // — jo sab se zyada istemal hote hain — kabhi kuch yaad nahi rakhte the.
   // Har baar wohi sawal, wohi API call, wohi intezar. Ab har mode seekhta
   // hai aur har mode apni yaadasht se jawab de sakta hai.
-  if (authUser && b?.brain !== false) {
+  // 🔒 Factual sawal par brain hit SKIP — pehle ghalat yaad ("John Doe")
+  // brain se inject ho kar model ko repeat karwati thi. Factual = hamesha
+  // research se, brain se nahi.
+  if (authUser && b?.brain !== false && !factualQ) {
     const hit = await recall(authUser.id, lastUser);
     if (hit) {
       return new Response(hit.answer, {
@@ -259,14 +289,6 @@ export async function POST(req: Request) {
 
   // ─── STEP 2: RESEARCH (parallel with nothing — ye pehle hona chahiye
   //     taake system prompt me chala jaye) ───
-  // 🔒 FACTUAL GUARD (server-side): "who is / founder / CEO / where" —
-  // in sawalon par model ko training se guess karne se ROKO. Research
-  // hamesha chalao, aur kuch na mile to jawab hi mat do.
-  const factualQ =
-    /\b(who is|who was|what is|what are|which|where|when|founder|ceo|president|prime minister|capital|invented|discovered|born|established|founded|headquarter|headquartered|owner|company)\b/i.test(
-      lastUser,
-    );
-
   let researchData = "";
   {
     // URL ho to hamesha padho — classifier ki raay ka intezar nahi.
@@ -363,6 +385,11 @@ export async function POST(req: Request) {
 
     if (result.ok) {
       if (authUser) logUsage({ userId: authUser.id, type: c.type, mode, success: true }).catch(() => {});
+      // 🔒 POST-VERIFY: factual sawal par answer ke naam research me
+      // honne chahiye — nahi to 'John Doe' jaisa ghadha jawab rok do.
+      if (factualQ && !answerGrounded(result.text, researchData)) {
+        return new Response(HONEST_MSG, { headers: dbg({ "X-Nexora-Note": "ungrounded-rejected" }) });
+      }
       const text = result.stale
         ? `${result.text}\n\n---\n*⚠️ Ye jawab ek purane model (${result.model}, cutoff ${
             REGISTRY.find((e) => e.name === result.model)?.cutoff || "?"
@@ -370,7 +397,8 @@ export async function POST(req: Request) {
         : result.text;
       // Achha jawab hamesha ke liye mehfooz — agli baar 0 API calls.
       // Purane (stale) model ka jawab yaad nahi rakhte, wo ghalat hoga.
-      if (authUser && !result.stale) {
+      // 🔒 Factual jawab sirf GROUNDED hone par hi save hota hai.
+      if (authUser && !result.stale && (!factualQ || answerGrounded(result.text, researchData))) {
         remember(authUser.id, lastUser, result.text, result.model).catch(() => {});
       }
       return new Response(text, {
@@ -420,6 +448,9 @@ export async function POST(req: Request) {
 
   if (good.length === 1) {
     if (authUser) logUsage({ userId: authUser.id, type: c.type, mode, success: true }).catch(() => {});
+    if (factualQ && !answerGrounded(good[0].text, researchData)) {
+      return new Response(HONEST_MSG, { headers: dbg({ "X-Nexora-Note": "ungrounded-rejected" }) });
+    }
     return new Response(good[0].text, {
       headers: dbg({ "X-Nexora-Model": good[0].model, "X-Nexora-Agents": "1" }),
     });
@@ -484,6 +515,9 @@ RULES:
           estimatedCost: "0",
           success: true,
         }).catch(() => {});
+      }
+      if (factualQ && !answerGrounded(sr.text, researchData)) {
+        return new Response(HONEST_MSG, { headers: dbg({ "X-Nexora-Note": "ungrounded-rejected" }) });
       }
       return new Response(sr.text, {
         headers: dbg({
