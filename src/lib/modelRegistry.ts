@@ -142,7 +142,7 @@ export const REGISTRY: Entry[] = [
   },
   {
     id: "cerebras-qwen235",
-    name: "Qwen3 235B (Cerebras)",
+    name: "Cerebras 235B",
     provider: "Cerebras",
     fmt: "openai",
     url: "https://api.cerebras.ai/v1/chat/completions",
@@ -168,7 +168,7 @@ export const REGISTRY: Entry[] = [
   },
   {
     id: "groq-qwen36",
-    name: "Qwen 3.6 27B (Groq)",
+    name: "Groq 27B",
     provider: "Groq",
     fmt: "openai",
     url: "https://api.groq.com/openai/v1/chat/completions",

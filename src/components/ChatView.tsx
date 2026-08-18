@@ -7,7 +7,7 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
-import { chatOllamaStream, ollamaReady } from "../lib/ollama";
+import { chatOllamaStream, ollamaReady, hideModelName } from "../lib/ollama";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
@@ -172,41 +172,37 @@ export function ChatView({
     setLocalStream(true);
     const m = getModel(mdl);
 
-    // ─── LOCAL QWEN + BAQI MODELS ───
-    // Fast/Balanced: pehle Qwen. Deep/Agents: search + team (cloud) —
-    // Qwen un tools nahi chala sakti. Qwen nakaam ho to cloud par girna.
-    if (ollamaReady(ollama) && mode !== "deep" && mode !== "agents") {
+    // Local model sirf MASTER — pehle chhote/cloud, aakhir me yahan polish.
+    // UI me naam nahi. Fail ho to draft hi de do.
+    const polishLocal = async (draft: string): Promise<string> => {
+      if (!ollamaReady(ollama) || !draft.trim() || cancelRef.current) return draft;
+      patchMessage(convId, assistantId, { thinking: ["Writing final answer"] });
       try {
-        patchMessage(convId, assistantId, { thinking: [`Qwen · ${ollama.model}`] });
-        const full = await chatOllamaStream(
+        const out = await chatOllamaStream(
           ollama,
           {
-            system: systemPrompt(personality),
-            messages: [...history, { role: "user", content: userText }],
+            system:
+              "You are Nexora. Turn the DRAFT into ONE final answer. " +
+              "Keep every fact, number and code block. Never mention drafts, teams, or models. " +
+              "Start directly with the answer. Match the user's language.",
+            messages: [
+              {
+                role: "user",
+                content:
+                  `USER ASKED:\n${userText}\n\n──── DRAFT ────\n${draft.slice(0, 12000)}\n\nFinal answer:`,
+              },
+            ],
             signal: ac.signal,
           },
           (partial) => {
             if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial, thinking: [] });
           },
         );
-        if (!cancelRef.current) {
-          patchMessage(convId, assistantId, { content: full, thinking: undefined, streaming: false });
-          setPipelineInfo({ agents: `Qwen (${ollama.model})`, orchestrator: "local Ollama" });
-        } else {
-          patchMessage(convId, assistantId, { streaming: false });
-        }
-        setLocalStream(false);
-        return;
-      } catch (e) {
-        if (cancelRef.current || (e instanceof DOMException && e.name === "AbortError")) {
-          patchMessage(convId, assistantId, { streaming: false });
-          setLocalStream(false);
-          return;
-        }
-        // Qwen band — Deep/master/cloud neeche se chalenge
-        patchMessage(convId, assistantId, { thinking: ["Qwen offline — cloud models"] });
+        return out.trim() || draft;
+      } catch {
+        return draft;
       }
-    }
+    };
 
     // ─── DEEP THINK / AGENTS ───
     // Pehle ye alag tabs me the aur user ko poochna parta tha "kaunsa
@@ -305,7 +301,7 @@ export function ChatView({
             let ev: Record<string, unknown>;
             try { ev = JSON.parse(line); } catch { continue; }
 
-            if (ev.type === "start") who = String(ev.model ?? "");
+            if (ev.type === "start") who = hideModelName(String(ev.model ?? ""));
             else if (ev.type === "step") {
               const st = ev.step as { tool?: string; thought?: string; n?: number };
               const label =
@@ -340,7 +336,7 @@ export function ChatView({
                 id: String(ev.id ?? ev.name),
                 name: String(ev.name ?? "Agent"),
                 status: "running",
-                model: ev.model ? String(ev.model) : undefined,
+                model: hideModelName(ev.model ? String(ev.model) : "") || undefined,
               });
               trace.phase = "agents";
               publish();
@@ -356,7 +352,7 @@ export function ChatView({
                 emoji: st.emoji,
                 color: st.color,
                 role: st.role,
-                model: st.model,
+                model: hideModelName(st.model) || undefined,
               });
               publish();
             } else if (ev.type === "synthesis:start") {
@@ -380,7 +376,7 @@ export function ChatView({
               publish();
             } else if (ev.type === "done") {
               finalText = String(ev.final ?? "");
-              who = String(ev.model ?? ev.synthesizedBy ?? who);
+              who = hideModelName(String(ev.model ?? ev.synthesizedBy ?? who));
             } else if (ev.type === "error") {
               throw new Error(String(ev.message ?? ev.error ?? "pipeline error"));
             }
@@ -390,13 +386,20 @@ export function ChatView({
         if (finalText) {
           for (const a of trace.agents) if (a.status === "running") a.status = "done";
           for (const s of trace.steps) s.status = "done";
+          // aakhri qadam: local master — naam UI pe nahi
+          if (ollamaReady(ollama)) {
+            addStep("master", "Writing final answer");
+            publish();
+          }
+          const polished = await polishLocal(finalText);
+          for (const s of trace.steps) s.status = "done";
           const snap: TraceState = {
             ...trace,
             agents: trace.agents.map((a) => ({ ...a })),
             steps: trace.steps.map((s) => ({ ...s })),
           };
           patchMessage(convId, assistantId, {
-            content: finalText,
+            content: polished,
             thinking: [isDeep ? "Deep Think" : "Agent team"],
             trace: snap,
             streaming: false,
@@ -443,10 +446,10 @@ export function ChatView({
 
         if (!res.ok) throw new Error("master failed");
 
-        // Capture pipeline info from headers
+        // Capture pipeline info from headers — model naam UI pe nahi
         setPipelineInfo({
-          agents: res.headers.get("x-agents-used") || "Nexora AI",
-          orchestrator: res.headers.get("x-orchestrator") || "",
+          agents: hideModelName(res.headers.get("x-nexora-agents") || res.headers.get("x-agents-used")) || "Nexora AI",
+          orchestrator: hideModelName(res.headers.get("x-nexora-master") || res.headers.get("x-orchestrator")) || "",
         });
 
         // Stream the master answer
@@ -462,7 +465,8 @@ export function ChatView({
             if (!cancelRef.current) patchMessage(convId, assistantId, { content: full });
           }
           if (!cancelRef.current) {
-            patchMessage(convId, assistantId, { content: full || "No response", streaming: false });
+            const polished = await polishLocal(full || "No response");
+            patchMessage(convId, assistantId, { content: polished, streaming: false });
           }
           setLocalStream(false);
           return;
@@ -475,7 +479,10 @@ export function ChatView({
             { system: systemPrompt(personality), messages: [...history, { role: "user", content: userText }] },
             (partial) => { if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial }); }
           );
-          if (!cancelRef.current) patchMessage(convId, assistantId, { content: fullText, streaming: false });
+          if (!cancelRef.current) {
+            const polished = await polishLocal(fullText);
+            patchMessage(convId, assistantId, { content: polished, streaming: false });
+          }
           setLocalStream(false);
           return;
         } catch {}
@@ -520,6 +527,8 @@ export function ChatView({
           offline.text,
       };
     }
+
+    result = { ...result, text: await polishLocal(result.text) };
 
     // Phase 1 — reveal "thinking" lines (only for offline extended-thinking models)
     if (!realConfig && m.thinks) {
@@ -702,15 +711,6 @@ export function ChatView({
             ))}
           </div>
           {/* Agent status indicator */}
-          {ollamaReady(ollama) && (
-            <span
-              className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-600 dark:text-violet-400"
-              title={ollama.baseUrl}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-              Qwen · local
-            </span>
-          )}
           {pipelineInfo && (
             <button
               onClick={() => setShowAgents((s) => !s)}

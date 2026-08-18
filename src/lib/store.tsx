@@ -240,7 +240,7 @@ function load(userId: number | null): Persisted {
           apiKeys,
           activeSlot,
           mediaKey: parsed.mediaKey || "",
-          // saved na ho to user ka Qwen default on
+          // saved na ho to local master default on
           ollama: migrateOllama(parsed.ollama),
         };
       }

@@ -96,7 +96,7 @@ function AgentChip({ agent }: { agent: TraceAgent }) {
   const skip = agent.status === "skipped";
   return (
     <span
-      title={agent.role ? `${agent.name} · ${agent.role}${agent.model ? ` · ${agent.model}` : ""}` : agent.name}
+      title={agent.role ? `${agent.name} · ${agent.role}` : agent.name}
       style={{ ["--chip" as string]: agent.color }}
       className={cn(
         "relative inline-flex items-center gap-1.5 overflow-hidden rounded-full border px-2.5 py-1 text-[12px] font-medium transition",

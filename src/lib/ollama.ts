@@ -42,6 +42,19 @@ export function ollamaReady(c?: OllamaConfig | null): boolean {
   return !!(c?.enabled && (c.baseUrl.trim() || c.fallbackUrl?.trim()) && c.model.trim());
 }
 
+/** UI me local / Qwen ka asal naam mat dikhao — sirf backend jaanta hai. */
+export function hideModelName(s?: string | null): string {
+  if (!s?.trim()) return "";
+  if (/qwen/i.test(s)) return "";
+  return s;
+}
+
+/** List se pehla local model chuno — Qwen ho to wo, warna pehla. Naam UI pe nahi. */
+export function pickLocalModel(models: string[], current?: string): string {
+  if (current && models.includes(current)) return current;
+  return models.find((m) => /qwen/i.test(m)) || models[0] || current || "qwen";
+}
+
 export function normalizeOllamaBase(url: string): string {
   let u = url.trim().replace(/\/+$/, "");
   if (!u) return u;
@@ -121,7 +134,7 @@ async function readStream(res: Response, onChunk: (partial: string) => void): Pr
       }
     }
   }
-  if (!full.trim()) throw new Error("Qwen ne khaali jawab diya");
+  if (!full.trim()) throw new Error("Local AI ne khaali jawab diya");
   return full;
 }
 

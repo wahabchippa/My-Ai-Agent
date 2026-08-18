@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "../utils/cn";
 import { useStore } from "../lib/store";
-import { testOllama, DEFAULT_OLLAMA } from "../lib/ollama";
+import { testOllama, DEFAULT_OLLAMA, pickLocalModel } from "../lib/ollama";
 
 interface Props {
   onOpenSidebar?: () => void;
@@ -15,7 +15,6 @@ export function SettingsView({ onOpenSidebar }: Props) {
   const [theme, setTheme] = useState<string>("light");
   const [ollamaTest, setOllamaTest] = useState<"idle" | "ping" | "ok" | "fail">("idle");
   const [ollamaMsg, setOllamaMsg] = useState("");
-  const [foundModels, setFoundModels] = useState<string[]>([]);
   // Nexora Brain — user ko dikhna chahiye ke yaadasht me kya hai, aur
   // ghalat yaad mitane ka raasta bhi ho. Warna wo "jadoo ka dabba" hai.
   const [brain, setBrain] = useState<{
@@ -70,11 +69,11 @@ export function SettingsView({ onOpenSidebar }: Props) {
 
       <div className="flex-1 overflow-auto px-3 pb-4 sm:px-5">
         <div className="max-w-xl space-y-4">
-          {/* Local Qwen — browser se seedha Ollama */}
+          {/* Local master — aakhri jawab, UI me model ka naam nahi */}
           <div className="rounded-xl border border-line bg-cream-surface p-4 dark:border-night-surface dark:bg-night-surface">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-ink dark:text-cream">🦙 Local Qwen</span>
+                <span className="text-sm font-semibold text-ink dark:text-cream">🏠 Local master</span>
                 <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10.5px] font-medium text-violet-600 dark:text-violet-400">
                   Ollama
                 </span>
@@ -90,8 +89,8 @@ export function SettingsView({ onOpenSidebar }: Props) {
               </button>
             </div>
             <p className="mb-3 mt-1.5 text-xs text-muted">
-              Fast/Balanced + Builder pehle Qwen. Deep/Agents par web search + team.
-              Qwen band ho to cloud models khud chalenge.
+              Pehle chhote / cloud models kaam karte hain, aakhri jawab local AI likhti hai.
+              Deep = search + code. Agents = team. Local band ho to cloud ka draft hi chalega.
             </p>
 
             <label className="mb-2 block text-[11px] font-medium text-muted">Local URL (terminal nahi chahiye)</label>
@@ -110,45 +109,15 @@ export function SettingsView({ onOpenSidebar }: Props) {
               className="mb-2 w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
             />
 
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted">API Key</label>
-                <input
-                  value={ollama.apiKey}
-                  onChange={(e) => setOllama({ ...ollama, apiKey: e.target.value })}
-                  placeholder="ollama"
-                  className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted">Model</label>
-                <input
-                  value={ollama.model}
-                  onChange={(e) => setOllama({ ...ollama, model: e.target.value })}
-                  placeholder="qwen"
-                  className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
-                />
-              </div>
+            <div className="mb-2">
+              <label className="mb-1 block text-[11px] font-medium text-muted">API Key</label>
+              <input
+                value={ollama.apiKey}
+                onChange={(e) => setOllama({ ...ollama, apiKey: e.target.value })}
+                placeholder="ollama"
+                className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-coral dark:border-night-deep dark:bg-night dark:text-cream"
+              />
             </div>
-
-            {foundModels.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1">
-                {foundModels.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setOllama({ ...ollama, model: m })}
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] transition",
-                      ollama.model === m
-                        ? "bg-violet-500 text-white"
-                        : "bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400",
-                    )}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            )}
 
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -158,15 +127,16 @@ export function SettingsView({ onOpenSidebar }: Props) {
                   const r = await testOllama(ollama);
                   if (r.ok) {
                     setOllamaTest("ok");
-                    setFoundModels(r.models);
+                    let viaHost = r.via;
+                    try { viaHost = new URL(r.via).host; } catch { /* jaise diya */ }
                     setOllamaMsg(
                       r.models.length
-                        ? `Connected · ${r.models.length} models · ${r.via}`
-                        : `Connected · ${r.via}`,
+                        ? `Connected · ${r.models.length} models · ${viaHost}`
+                        : `Connected · ${viaHost}`,
                     );
-                    // list me qwen jaisa naam ho to usay chun lo
-                    const qwen = r.models.find((m) => /qwen/i.test(m));
-                    if (qwen && !r.models.includes(ollama.model)) setOllama({ ...ollama, model: qwen });
+                    // asal naam sirf store me — UI pe nahi
+                    const pick = pickLocalModel(r.models, ollama.model);
+                    if (pick !== ollama.model) setOllama({ ...ollama, model: pick });
                   } else {
                     setOllamaTest("fail");
                     setOllamaMsg(r.error);
