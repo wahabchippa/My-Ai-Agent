@@ -22,6 +22,8 @@ function isCredits(status: number, msg: string): boolean {
   return status === 402 || /credit|quota|payment|insufficient|balance|limit|expired|no key/i.test(msg);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function poll(fetchResult: string, key: string): Promise<string | null> {
   for (let i = 0; i < 18; i++) {
     await sleep(5000);
