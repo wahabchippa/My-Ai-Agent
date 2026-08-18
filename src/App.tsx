@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StoreProvider, useStore } from "./lib/store";
 import { useAuth } from "./lib/useAuth";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -23,6 +23,15 @@ function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const openNav = () => setMobileNavOpen(true);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   // Loading
   if (loading) {

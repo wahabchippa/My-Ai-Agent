@@ -14,27 +14,35 @@ export function ChatInput({
   onSend,
   onStop,
   streaming,
-  model,
-  onModelChange,
   placeholder = "How can I help you today?",
   compact = false,
-  web,
-  onWebChange,
+  prefill,
+  onPrefillUsed,
 }: {
   onSend: (text: string) => void;
   onStop?: () => void;
   streaming: boolean;
-  model: ModelId;
-  onModelChange: (m: ModelId) => void;
+  model?: ModelId;
+  onModelChange?: (m: ModelId) => void;
   placeholder?: string;
   compact?: boolean;
   web?: boolean;
   onWebChange?: (b: boolean) => void;
+  /** pencil se wapas input me */
+  prefill?: string | null;
+  onPrefillUsed?: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [seenPrefill, setSeenPrefill] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<{ name: string; content: string } | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // props se state — effect nahi, React 19 render-time adjust
+  if (prefill && prefill !== seenPrefill) {
+    setSeenPrefill(prefill);
+    setValue(prefill);
+  }
 
   const { supported: micSupported, listening, start: startMic, stop: stopMic } =
     useSpeechToText((text) => {

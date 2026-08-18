@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -110,6 +109,8 @@ interface StoreShape {
   clearAll: () => void;
   addMessage: (convId: string, msg: Message) => void;
   patchMessage: (convId: string, msgId: string, patch: Partial<Message>) => void;
+  /** is message aur us ke baad sab hatao — user edit / resend ke liye */
+  trimFrom: (convId: string, msgId: string) => void;
   setConversationModel: (id: string, m: ModelId) => void;
 }
 
@@ -131,37 +132,6 @@ function titleFrom(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean) return "New chat";
   return clean.length > 38 ? clean.slice(0, 38) + "…" : clean;
-}
-
-function seedConversations(): Conversation[] {
-  // a friendly starting example so the sidebar isn't empty
-  const now = Date.now();
-  return [
-    {
-      id: uid(),
-      title: "Welcome to Nexora",
-      model: "sonnet",
-      createdAt: now - 1000 * 60 * 60 * 26,
-      updatedAt: now - 1000 * 60 * 60 * 26,
-      starred: true,
-      messages: [
-        {
-          id: uid(),
-          role: "user",
-          content: "What can you help me with?",
-          ts: now - 1000 * 60 * 60 * 26,
-        },
-        {
-          id: uid(),
-          role: "assistant",
-          model: "sonnet",
-          content:
-            "I'm **Nexora** — I can write and edit, reason through hard problems, write and debug code, summarize documents, brainstorm ideas, and plenty more.\n\nTry asking me to `explain` something, `write code`, or compare options. What are you working on?",
-          ts: now - 1000 * 60 * 60 * 26 + 5000,
-        },
-      ],
-    },
-  ];
 }
 
 interface Persisted {
@@ -264,14 +234,11 @@ function load(userId: number | null): Persisted {
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  // Server render par localStorage mojood nahi — is liye khali se shuru
-  // karte hain aur asli data neeche wale effect me aata hai.
-  const initial = useRef<Persisted | null>(null);
-  if (initial.current === null) {
-    initial.current =
-      typeof window === "undefined" ? emptyState() : load(null);
-  }
-  const data = initial.current;
+  // Server render par localStorage mojood nahi — lazy init, ref nahi
+  // (eslint react-hooks/refs render me .current nahi dekhna chahta).
+  const [boot] = useState<Persisted>(() =>
+    typeof window === "undefined" ? emptyState() : load(null),
+  );
 
   // Kaun logged in hai. null = abhi maloom nahi / guest.
   const [userId, setUserId] = useState<number | null>(null);
@@ -279,18 +246,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // state login wale user ke saved data ke upar chal jata.
   const [hydrated, setHydrated] = useState(false);
 
-  const [conversations, setConversations] = useState<Conversation[]>(
-    data.conversations
-  );
+  const [conversations, setConversations] = useState<Conversation[]>(boot.conversations);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [model, setModelState] = useState<ModelId>(data.model);
-  const [mode, setModeState] = useState<ChatMode>(data.mode ?? "balanced");
-  const [theme, setTheme] = useState<Theme>(data.theme);
-  const [personality, setPersonality] = useState<PersonalityId>(data.personality);
-  const [apiKeys, setApiKeys] = useState<ApiKeys>(data.apiKeys);
-  const [activeSlot, setActiveSlotState] = useState<string | null>(data.activeSlot);
-  const [mediaKey, setMediaKeyState] = useState<string>(data.mediaKey ?? "");
-  const [ollama, setOllamaState] = useState<OllamaConfig>(migrateOllama(data.ollama));
+  const [model, setModelState] = useState<ModelId>(boot.model);
+  const [mode, setModeState] = useState<ChatMode>(boot.mode ?? "balanced");
+  const [theme, setTheme] = useState<Theme>(boot.theme);
+  const [personality, setPersonality] = useState<PersonalityId>(boot.personality);
+  const [apiKeys, setApiKeys] = useState<ApiKeys>(boot.apiKeys);
+  const [activeSlot, setActiveSlotState] = useState<string | null>(boot.activeSlot);
+  const [mediaKey, setMediaKeyState] = useState<string>(boot.mediaKey ?? "");
+  const [ollama, setOllamaState] = useState<OllamaConfig>(() => migrateOllama(boot.ollama));
+
+  // pehle declare — hydrate effect isay call karta hai (eslint immutability)
+  const applyState = useCallback((st: Persisted) => {
+    setConversations(st.conversations);
+    setModelState(st.model);
+    setModeState(st.mode ?? "balanced");
+    setTheme(st.theme);
+    setPersonality(st.personality);
+    setApiKeys(st.apiKeys);
+    setActiveSlotState(st.activeSlot);
+    setMediaKeyState(st.mediaKey ?? "");
+    setOllamaState(migrateOllama(st.ollama));
+  }, []);
 
   // ── Kaun login hai? ──────────────────────────────────────────────────
   // Mount par ek dafa. Jawab aane par us user ka apna data load hota hai.
@@ -360,20 +338,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  // Ek hi jagah se poora state set karne ka helper.
-  function applyState(st: Persisted) {
-    setConversations(st.conversations);
-    setModelState(st.model);
-    setModeState(st.mode ?? "balanced");
-    setTheme(st.theme);
-    setPersonalityState(st.personality);
-    setApiKeys(st.apiKeys);
-    setActiveSlotState(st.activeSlot);
-    setMediaKeyState(st.mediaKey ?? "");
-    setOllamaState(migrateOllama(st.ollama));
-  }
+  }, [applyState]);
 
   // ── Save: localStorage foran + Neon 2s debounce ──────────────────────
   useEffect(() => {
@@ -467,7 +432,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setConversations((prev) => [conv, ...prev]);
     setActiveId(id);
     return id;
-  }, [model]);
+  }, [model, mode]);
 
   const selectChat = useCallback((id: string) => setActiveId(id), []);
 
@@ -537,6 +502,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const trimFrom = useCallback((convId: string, msgId: string) => {
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id !== convId) return c;
+        const i = c.messages.findIndex((m) => m.id === msgId);
+        if (i < 0) return c;
+        return { ...c, messages: c.messages.slice(0, i), updatedAt: Date.now() };
+      }),
+    );
+  }, []);
+
   const setConversationModel = useCallback((id: string, m: ModelId) => {
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, model: m } : c))
@@ -573,6 +549,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     clearAll,
     addMessage,
     patchMessage,
+    trimFrom,
     setConversationModel,
   };
 

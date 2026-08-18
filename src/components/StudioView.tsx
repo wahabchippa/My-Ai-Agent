@@ -290,13 +290,31 @@ export function StudioView({ onOpenSidebar }: Props) {
             {items.map((it) => (
               <figure
                 key={it.id}
-                className="overflow-hidden rounded-xl border border-line bg-cream-surface dark:border-night-surface dark:bg-night-surface"
+                className="group/fig relative overflow-hidden rounded-xl border border-line bg-cream-surface dark:border-night-surface dark:bg-night-surface"
               >
                 {it.kind === "video" ? (
                   <video src={it.url} controls className="aspect-video w-full bg-black" />
                 ) : (
                   <img src={it.url} alt={it.prompt} className="aspect-square w-full object-cover" />
                 )}
+                <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover/fig:opacity-100">
+                  <a
+                    href={it.url}
+                    download
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-black/60 px-2 py-1 text-[10px] text-white"
+                  >
+                    ↓
+                  </a>
+                  <button
+                    onClick={() => save(items.filter((x) => x.id !== it.id))}
+                    className="rounded-md bg-black/60 px-2 py-1 text-[10px] text-white"
+                    title="Delete"
+                  >
+                    ✕
+                  </button>
+                </div>
                 <figcaption className="line-clamp-2 px-3 py-2 text-[11.5px] text-muted">
                   {it.via && <span className="mb-0.5 block text-[10px] text-muted-2">{it.via}</span>}
                   {it.prompt}

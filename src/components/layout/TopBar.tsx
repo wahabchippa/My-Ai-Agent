@@ -1,6 +1,6 @@
 "use client";
 
-import { MenuIcon, BellIcon } from "../ui/icons";
+import { MenuIcon } from "../ui/icons";
 import type { ViewType } from "@/App";
 import type { AppUser } from "@/lib/useAuth";
 
@@ -54,14 +54,6 @@ export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileN
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* Notifications */}
-        <button
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-subtle hover:text-text transition"
-          title="Notifications"
-        >
-          <BellIcon size={18} />
-        </button>
-
         {/* User Avatar */}
         <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-subtle transition cursor-pointer">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-accent to-nebula text-sm font-semibold text-void">

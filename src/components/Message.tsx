@@ -400,12 +400,14 @@ export function MessageItem({
   onRegenerate,
   onFeedback,
   onOpenArtifact,
+  onEdit,
 }: {
   msg: Message;
   isLast: boolean;
   onRegenerate?: () => void;
   onFeedback?: (v: "up" | "down") => void;
   onOpenArtifact?: (a: { title: string; lang: string; code: string }) => void;
+  onEdit?: (msgId: string, text: string) => void;
 }) {
   const codeBlock = msg.role === "assistant" ? firstCodeBlock(msg.content) : null;
   if (msg.role === "user") {
@@ -415,11 +417,17 @@ export function MessageItem({
           <div className="rounded-2xl rounded-br-md bg-cream-deep px-4 py-2.5 text-[15px] leading-relaxed text-ink-soft dark:bg-night-surface dark:text-cream/90">
             {msg.content}
           </div>
-          <div className="opacity-0 transition group-hover:opacity-100">
-            <button className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-2 transition hover:bg-cream-deep hover:text-ink-soft dark:hover:bg-night-surface">
-              <PencilIcon size={14} />
-            </button>
-          </div>
+          {onEdit && (
+            <div className="opacity-0 transition group-hover:opacity-100">
+              <button
+                onClick={() => onEdit(msg.id, msg.content)}
+                title="Edit and resend"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-2 transition hover:bg-cream-deep hover:text-ink-soft dark:hover:bg-night-surface"
+              >
+                <PencilIcon size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

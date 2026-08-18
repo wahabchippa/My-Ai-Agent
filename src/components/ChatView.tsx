@@ -9,7 +9,7 @@ import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
 import { chatOllamaStream, ollamaReady, hideModelName } from "../lib/ollama";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
-import { MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
+import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -49,7 +49,7 @@ const SUGGESTIONS = [
 ];
 
 export function ChatView({
-  onOpenSidebar,
+  onOpenSidebar: _onOpenSidebar,
 }: {
   onOpenSidebar: () => void;
 }) {
@@ -65,6 +65,7 @@ export function ChatView({
     newChat,
     addMessage,
     patchMessage,
+    trimFrom,
     personality,
     apiKeys,
     activeSlot,
@@ -94,6 +95,7 @@ export function ChatView({
   };
   const [showAgents, setShowAgents] = useState(false);
   const [pipelineInfo, setPipelineInfo] = useState<{ agents: string; orchestrator: string } | null>(null);
+  const [prefill, setPrefill] = useState<string | null>(null);
 
   const messages = active?.messages ?? [];
   const lastMsg = messages[messages.length - 1];
@@ -607,6 +609,12 @@ export function ChatView({
     abortRef.current?.abort();
   };
 
+  const handleEdit = (msgId: string, text: string) => {
+    if (!activeId || isStreaming) return;
+    trimFrom(activeId, msgId);
+    setPrefill(text);
+  };
+
   const handleFeedback = (msgId: string, v: "up" | "down") => {
     if (!activeId) return;
     const cur = active?.messages.find((m) => m.id === msgId)?.feedback;
@@ -625,12 +633,6 @@ export function ChatView({
     <div className="relative flex min-w-0 flex-1 flex-col bg-cream dark:bg-night">
       {/* Top bar */}
       <header className="flex items-center gap-2 px-3 py-2.5 sm:px-5">
-        <button
-          onClick={onOpenSidebar}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-cream-deep lg:hidden dark:text-cream"
-        >
-          <MenuIcon size={20} />
-        </button>
         <div className="flex items-center gap-2">
           <span className="text-coral">
             <img src="/nexora-logo.png" alt="Nexora" className="h-5 w-5 rounded-full object-cover" />
@@ -744,6 +746,8 @@ export function ChatView({
                 placeholder="Reply to Nexora…"
                 web={web}
                 onWebChange={setWeb}
+                prefill={prefill}
+                onPrefillUsed={() => setPrefill(null)}
               />
               <p className="mt-2 text-center text-[11px] text-muted-2">
                 Nexora can make mistakes. Responses come from real models via
