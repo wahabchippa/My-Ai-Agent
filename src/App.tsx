@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { StoreProvider } from "./lib/store";
+import { useState } from "react";
+import { StoreProvider, useStore } from "./lib/store";
 import { useAuth } from "./lib/useAuth";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TopBar } from "./components/layout/TopBar";
@@ -17,31 +17,12 @@ export type ViewType = "chat" | "workspace" | "studio" | "admin" | "settings";
 
 function AppShell() {
   const { user, loading, logout } = useAuth();
+  const { theme, toggleTheme } = useStore();
   const [view, setView] = useState<ViewType>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("light");
 
-  // Apply theme
-  useEffect(() => {
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-  }, [theme]);
-
-  // Load saved theme — but only respect "light"; ignore stale "dark" so the
-  // new clean light design shows even if the browser cached an old dark pref.
-  useEffect(() => {
-    const saved = localStorage.getItem("nexora-theme") as "dark" | "light" | null;
-    if (saved === "light") setTheme("light");
-    else setTheme("light");
-    localStorage.setItem("nexora-theme", "light");
-  }, []);
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("nexora-theme", next);
-  };
+  const openNav = () => setMobileNavOpen(true);
 
   // Loading
   if (loading) {
@@ -88,11 +69,11 @@ function AppShell() {
         />
 
         <div className="flex-1 overflow-hidden">
-          {view === "chat" && <ChatView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "chat" && <ChatView onOpenSidebar={openNav} />}
           {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
-          {view === "workspace" && <WorkspaceView onOpenSidebar={() => setSidebarOpen(true)} />}
-          {view === "studio" && <StudioView onOpenSidebar={() => setSidebarOpen(true)} />}
-          {view === "settings" && <SettingsView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "workspace" && <WorkspaceView onOpenSidebar={openNav} />}
+          {view === "studio" && <StudioView onOpenSidebar={openNav} />}
+          {view === "settings" && <SettingsView onOpenSidebar={openNav} />}
         </div>
       </main>
 
@@ -107,6 +88,7 @@ function AppShell() {
             <Sidebar
               view={view}
               isOpen
+              embedded
               onToggle={() => setMobileNavOpen(false)}
               onViewChange={(v) => {
                 setView(v);
@@ -120,18 +102,6 @@ function AppShell() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <div className="text-5xl mb-4">🚀</div>
-        <h2 className="text-xl font-semibold text-text mb-2">{title}</h2>
-        <p className="text-text-secondary">Coming soon...</p>
-      </div>
     </div>
   );
 }

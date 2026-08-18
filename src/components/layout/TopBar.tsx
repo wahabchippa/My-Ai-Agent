@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { MenuIcon, BellIcon } from "../ui/icons";
-import { cn } from "@/utils/cn";
 import type { ViewType } from "@/App";
 import type { AppUser } from "@/lib/useAuth";
 
@@ -15,8 +13,6 @@ interface TopBarProps {
 }
 
 export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileNav }: TopBarProps) {
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-
   const viewTitles: Record<ViewType, string> = {
     chat: "AI Chat",
     workspace: "Project Builder",
@@ -60,11 +56,10 @@ export function TopBar({ user, view, sidebarOpen, onToggleSidebar, onOpenMobileN
       <div className="flex items-center gap-2">
         {/* Notifications */}
         <button
-          onClick={() => setNotificationsOpen(!notificationsOpen)}
           className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-subtle hover:text-text transition"
+          title="Notifications"
         >
           <BellIcon size={18} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent animate-pulse" />
         </button>
 
         {/* User Avatar */}

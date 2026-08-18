@@ -234,8 +234,7 @@ function load(userId: number | null): Persisted {
           conversations: parsed.conversations,
           mode: (parsed.mode as ChatMode) ?? "balanced",
           model: parsed.model ?? "sonnet",
-          // Force the clean light theme; ignore any stale saved "dark".
-          theme: "light",
+          theme: parsed.theme === "dark" || parsed.theme === "light" ? parsed.theme : "light",
           personality: parsed.personality ?? "claude",
           apiKeys,
           activeSlot,
@@ -412,6 +411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (theme === "dark") root.classList.add("dark");
     else root.classList.remove("dark");
     root.style.colorScheme = theme;
+    try { localStorage.setItem("nexora-theme", theme); } catch { /* quota */ }
   }, [theme]);
 
   const active = useMemo(

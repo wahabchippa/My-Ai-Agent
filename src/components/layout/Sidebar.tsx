@@ -3,9 +3,9 @@
 import { useState, useMemo } from "react";
 import { useStore, type Conversation } from "@/lib/store";
 import {
-  PlusIcon, SearchIcon, StarIcon, TrashIcon, MoreVerticalIcon,
-  ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon, ImageIcon,
-  SunIcon, MoonIcon, LogOutIcon, HelpCircleIcon,
+  PlusIcon, SearchIcon, StarIcon, TrashIcon,
+  ChatIcon, CodeIcon, SettingsIcon, ShieldIcon, ImageIcon,
+  SunIcon, MoonIcon, LogOutIcon,
 } from "../ui/icons";
 import { cn } from "@/utils/cn";
 import type { ViewType } from "@/App";
@@ -19,6 +19,8 @@ interface SidebarProps {
   theme: "dark" | "light";
   onToggleTheme: () => void;
   onLogout: () => void;
+  /** mobile overlay ke andar — `hidden lg:flex` hatao warna menu gayab */
+  embedded?: boolean;
 }
 
 interface NavItem {
@@ -54,7 +56,7 @@ function groupConversations(items: Conversation[]) {
   return groups;
 }
 
-export function Sidebar({ view, isOpen, onToggle, onViewChange, isAdmin, theme, onToggleTheme, onLogout }: SidebarProps) {
+export function Sidebar({ view, isOpen, onToggle, onViewChange, isAdmin, theme, onToggleTheme, onLogout, embedded }: SidebarProps) {
   const { conversations, activeId, newChat, selectChat, deleteChat, toggleStar } = useStore();
   const [search, setSearch] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -84,7 +86,10 @@ export function Sidebar({ view, isOpen, onToggle, onViewChange, isAdmin, theme, 
   const isChat = view === "chat";
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col border-r border-border bg-surface">
+    <aside className={cn(
+      "flex w-64 flex-col border-r border-border bg-surface",
+      embedded ? "h-full w-full border-0" : "hidden lg:flex",
+    )}>
       {/* Logo + nav items header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-3">
         <div className="flex items-center gap-2">

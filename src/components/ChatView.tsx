@@ -14,45 +14,6 @@ import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Try Puter.js first — free access to GPT-5.4, Claude, Gemini (400+ models).
- * Returns the response text, or null if Puter is unavailable/failed.
- */
-async function tryPuter(system: string, messages: { role: string; content: string }[], onChunk: (t: string) => void): Promise<string | null> {
-  try {
-    const puter = (window as any).puter;
-    if (!puter?.ai?.chat) return null;
-
-    // Silent auth — no popup confusion
-    const result = await puter.ai.chat(messages[messages.length - 1]?.content || "hello", {
-      model: "openai/gpt-5.4-nano",
-      stream: true,
-    });
-
-    // Handle streaming response
-    let full = "";
-    if (result && typeof result[Symbol.asyncIterator] === "function") {
-      for await (const part of result) {
-        const chunk = part?.text || part?.choices?.[0]?.delta?.content || "";
-        if (chunk) { full += chunk; onChunk(full); }
-      }
-    } else if (typeof result === "string") {
-      full = result;
-      onChunk(full);
-    } else if (result?.message?.content) {
-      full = typeof result.message.content === "string" ? result.message.content : JSON.stringify(result.message.content);
-      onChunk(full);
-    } else if (result?.choices?.[0]?.message?.content) {
-      full = result.choices[0].message.content;
-      onChunk(full);
-    }
-
-    return full.trim() || null;
-  } catch {
-    return null; // Puter failed — fall back to backend
-  }
-}
-
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -131,11 +92,8 @@ export function ChatView({
     setDefaultMode(m);                                   // agla naya chat
     if (activeId) setConversationMode(activeId, m);      // ye wala chat
   };
-  // Deep/Agents chalte waqt live qadam — user ko dikhe ke kaam ho raha hai.
-  const [liveSteps, setLiveSteps] = useState<string[]>([]);
   const [showAgents, setShowAgents] = useState(false);
   const [pipelineInfo, setPipelineInfo] = useState<{ agents: string; orchestrator: string } | null>(null);
-  const [freeModel, setFreeModel] = useState<string | null>(null);
 
   const messages = active?.messages ?? [];
   const lastMsg = messages[messages.length - 1];
@@ -209,9 +167,9 @@ export function ChatView({
     // tab?". Ab wohi taqat isi chat me hai — sirf mode badlo.
     //   deep   -> /api/think  (khud tools chalata hai: search, page, code)
     //   agents -> /api/agents (poori team: engineer/reviewer/tester/docs)
-    if (!realConfig && (mode === "deep" || mode === "agents")) {
+    // BYO key ho to bhi Deep/Agents chalein — warna tools skip ho jate the.
+    if (mode === "deep" || mode === "agents") {
       try {
-        setLiveSteps([]);
         const isDeep = mode === "deep";
         const url = isDeep ? "/api/think?stream=1" : "/api/agents?stream=1";
         const body = isDeep
@@ -244,7 +202,6 @@ export function ChatView({
             steps: trace.steps.map((s) => ({ ...s })),
           };
           const head = headlineOf(snap);
-          setLiveSteps([head]);
           patchMessage(convId, assistantId, { thinking: [head], trace: snap });
         };
 
@@ -408,17 +365,14 @@ export function ChatView({
             agents: who || (isDeep ? "Deep Think" : snap.agents.map((a) => a.name).join(", ") || "Agent team"),
             orchestrator: snap.agents.map((a) => a.name).join(" · "),
           });
-          setLiveSteps([]);
           setLocalStream(false);
           return;
         }
         // Kuch na mila to neeche wala aam raasta chal jayega.
-        setLiveSteps([]);
         patchMessage(convId, assistantId, { trace: undefined });
       } catch {
         // Deep/Agents nakaam — chup chaap aam chat par gir jao. User ko
         // khali screen dena sab se bura natija hai.
-        setLiveSteps([]);
         patchMessage(convId, assistantId, { trace: undefined });
       }
     }

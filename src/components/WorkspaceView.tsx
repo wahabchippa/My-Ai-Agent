@@ -155,25 +155,60 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
     const ac = new AbortController();
     abortRef.current = ac;
 
-    try {
-      const res = await fetch("/api/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: t }),
-        signal: ac.signal,
+    const apply = (d: { name?: string; summary?: string; stack?: string; files: ProjectFile[] }) => {
+      const files = d.files.filter((f) => f.path && f.content).map((f) => ({ ...f, lang: f.lang || langOf(f.path) }));
+      if (!files.length) return false;
+      setProject({
+        name: d.name || "project",
+        summary: d.summary || "",
+        stack: d.stack || "",
+        files,
+        built: files.length,
+        total: files.length,
+        ms: Date.now() - startRef.current,
       });
-      const d = await res.json();
-      if (!d.ok) {
-        setError(d.message || d.error || "Project nahi ban saka");
-        return;
-      }
-      setProject(d as Project);
       setChat([]);
-      setActivePath(d.files[0]?.path ?? "");
-      setTab(d.files.some((f: ProjectFile) => /\.html?$/i.test(f.path)) ? "preview" : "code");
+      setActivePath(files[0].path);
+      setTab(files.some((f) => /\.html?$/i.test(f.path)) ? "preview" : "code");
       setPrompt("");
+      return true;
+    };
+
+    try {
+      try {
+        const res = await fetch("/api/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: t }),
+          signal: ac.signal,
+        });
+        const d = await res.json();
+        if (d.ok && apply(d as Project)) return;
+        setError(d.message || d.error || "Cloud nahi chala — local try...");
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        setError((e as Error).message || "Network error");
+      }
+
+      // Cloud fail — local master rescue (browser se Ollama)
+      if (ollamaReady(ollama)) {
+        const raw = await chatOllama(ollama, {
+          system:
+            "Reply ONLY JSON, no fence:\\n" +
+            '{"name":"kebab-name","summary":"one line","stack":"html,css,js","files":[{"path":"index.html","content":"FULL file"}]}\\n' +
+            "3 to 7 complete files. Whole contents. Prefer HTML+CSS+JS that opens in a browser.",
+          messages: [{ role: "user", content: t }],
+          signal: ac.signal,
+        });
+        const p = parseJsonObj<{ name?: string; summary?: string; stack?: string; files?: { path: string; content: string }[] }>(raw);
+        if (p?.files?.length && apply({ ...p, files: p.files.map((f) => ({ ...f, lang: langOf(f.path) })) })) {
+          setError("");
+          return;
+        }
+      }
+      setError((prev) => prev || "Project nahi ban saka");
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setError((e as Error).message || "Network error");
+      if ((e as Error).name !== "AbortError") setError((e as Error).message || "Build fail");
     } finally {
       setBusy(false);
     }

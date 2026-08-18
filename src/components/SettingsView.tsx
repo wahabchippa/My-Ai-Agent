@@ -10,9 +10,8 @@ interface Props {
 }
 
 export function SettingsView({ onOpenSidebar }: Props) {
-  const { ollama, setOllama } = useStore();
+  const { ollama, setOllama, theme, toggleTheme } = useStore();
   const [user, setUser] = useState<any>(null);
-  const [theme, setTheme] = useState<string>("light");
   const [ollamaTest, setOllamaTest] = useState<"idle" | "ping" | "ok" | "fail">("idle");
   const [ollamaMsg, setOllamaMsg] = useState("");
   // Nexora Brain — user ko dikhna chahiye ke yaadasht me kya hai, aur
@@ -35,21 +34,12 @@ export function SettingsView({ onOpenSidebar }: Props) {
       .then((r) => r.json())
       .then((d) => setUser(d.user))
       .catch(() => {});
-    setTheme(localStorage.getItem("nexora-theme") || "light");
     loadBrain();
   }, []);
 
   const forget = async (id: number | "all") => {
     await fetch(`/api/brain?id=${id}`, { method: "DELETE", credentials: "include" }).catch(() => {});
     loadBrain();
-  };
-
-  const toggleTheme = () => {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    localStorage.setItem("nexora-theme", next);
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(next);
   };
 
   return (
