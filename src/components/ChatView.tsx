@@ -7,7 +7,7 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
-import { chatOllamaStream, ollamaReady, explainOllama } from "../lib/ollama";
+import { chatOllamaStream, ollamaReady } from "../lib/ollama";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { MenuIcon, SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
@@ -172,9 +172,10 @@ export function ChatView({
     setLocalStream(true);
     const m = getModel(mdl);
 
-    // ─── LOCAL QWEN (Ollama) — sirf yahi, koi doosra model nahi ───
-    // Terminal band = Qwen band. Cloud/master/agents par NAHI girna.
-    if (ollamaReady(ollama)) {
+    // ─── LOCAL QWEN + BAQI MODELS ───
+    // Fast/Balanced: pehle Qwen. Deep/Agents: search + team (cloud) —
+    // Qwen un tools nahi chala sakti. Qwen nakaam ho to cloud par girna.
+    if (ollamaReady(ollama) && mode !== "deep" && mode !== "agents") {
       try {
         patchMessage(convId, assistantId, { thinking: [`Qwen · ${ollama.model}`] });
         const full = await chatOllamaStream(
@@ -202,15 +203,8 @@ export function ChatView({
           setLocalStream(false);
           return;
         }
-        patchMessage(convId, assistantId, {
-          content:
-            `⚠️ **Local Qwen band hai** — ${explainOllama(e)}\n\n` +
-            `Doosra model nahi chalega. Ollama app (llama icon) tray me chalu rakho — terminal ki zaroorat nahi.`,
-          thinking: undefined,
-          streaming: false,
-        });
-        setLocalStream(false);
-        return;
+        // Qwen band — Deep/master/cloud neeche se chalenge
+        patchMessage(convId, assistantId, { thinking: ["Qwen offline — cloud models"] });
       }
     }
 

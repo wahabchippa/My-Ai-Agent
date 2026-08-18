@@ -55,15 +55,17 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   const b = (await req.json().catch(() => null)) as MediaBody | null;
-  if (!b || !b.key) {
+  // Client key ya Vercel env — ek dafa set
+  const key = (b?.key || process.env.MODELSLAB_API_KEY || "").trim();
+  if (!b || !key) {
     return NextResponse.json(
-      { error: "Missing ModelsLab API key." },
+      { error: "ModelsLab key nahi. Vercel me MODELSLAB_API_KEY daalo." },
       { status: 400, headers: corsHeaders }
     );
   }
 
   const payload = {
-    key: b.key,
+    key,
     model_id: b.model_id || "svd",
     init_image: b.init_image,
     prompt: b.prompt || "",
@@ -90,17 +92,18 @@ export async function POST(req: Request) {
     }
     // immediate success
     if (d?.status === "success" && Array.isArray(d.output) && d.output.length) {
+      const url = d.output[0] as string;
       return NextResponse.json(
-        { video: d.output[0], status: "success" },
+        { url, video: url, image: url, status: "success" },
         { headers: corsHeaders }
       );
     }
     // queued — poll the fetch_result endpoint
     if (d?.fetch_result) {
-      const video = await poll(d.fetch_result, b.key);
-      if (video)
+      const url = await poll(d.fetch_result, key);
+      if (url)
         return NextResponse.json(
-          { video, status: "success" },
+          { url, video: url, image: url, status: "success" },
           { headers: corsHeaders }
         );
       return NextResponse.json(

@@ -90,9 +90,8 @@ export function SettingsView({ onOpenSidebar }: Props) {
               </button>
             </div>
             <p className="mb-3 mt-1.5 text-xs text-muted">
-              Jugaad: pehle <code className="text-[11px]">localhost:11434</code> —
-              Ollama app tray me chalti rahe, terminal band karo koi masla nahi.
-              Sirf local Qwen, koi doosra model nahi.
+              Fast/Balanced + Builder pehle Qwen. Deep/Agents par web search + team.
+              Qwen band ho to cloud models khud chalenge.
             </p>
 
             <label className="mb-2 block text-[11px] font-medium text-muted">Local URL (terminal nahi chahiye)</label>

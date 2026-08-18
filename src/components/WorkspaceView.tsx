@@ -22,6 +22,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { downloadZip } from "../lib/zip";
 import { cn } from "../utils/cn";
 import { MenuIcon, ArrowUp, CheckIcon, CopyIcon, SparkleIcon, StopIcon } from "./icons";
+import { useStore } from "../lib/store";
+import { chatOllama, ollamaReady } from "../lib/ollama";
 
 interface Props {
   onOpenSidebar?: () => void;
@@ -73,7 +75,31 @@ function buildPreview(files: ProjectFile[]): string | null {
   return out;
 }
 
+function parseJsonObj<T>(raw: string): T | null {
+  let t = raw.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) t = fence[1].trim();
+  const a = t.indexOf("{");
+  const b = t.lastIndexOf("}");
+  if (a === -1 || b <= a) return null;
+  try {
+    return JSON.parse(t.slice(a, b + 1)) as T;
+  } catch {
+    return null;
+  }
+}
+
+const langOf = (p: string): string => {
+  const e = p.split(".").pop()?.toLowerCase() ?? "";
+  const m: Record<string, string> = {
+    ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
+    py: "python", html: "html", css: "css", json: "json", md: "markdown",
+  };
+  return m[e] ?? "text";
+};
+
 export function WorkspaceView({ onOpenSidebar }: Props) {
+  const { ollama } = useStore();
   const [prompt, setPrompt] = useState("");
   const [project, setProject] = useState<Project | null>(null);
   const [activePath, setActivePath] = useState("");
@@ -166,6 +192,43 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
+      if (ollamaReady(ollama)) {
+        try {
+          const peek = project.files
+            .map((f) => `──── ${f.path} ────\n${f.content.slice(0, 2500)}`)
+            .join("\n\n")
+            .slice(0, 9000);
+          const raw = await chatOllama(
+            ollama,
+            {
+              system:
+                "Edit the project. Reply ONLY JSON:\n" +
+                '{"reply":"short","files":[{"path":"app.js","content":"FULL new file"}]}\n' +
+                "Return ONLY files that must change. Whole file contents, no fence.",
+              messages: [{ role: "user", content: `REQUEST: ${t}\n\n${peek}` }],
+              signal: ac.signal,
+            },
+          );
+          const p = parseJsonObj<{ reply?: string; files?: { path: string; content: string }[] }>(raw);
+          if (p?.files?.length) {
+            const by = new Map(project.files.map((f) => [f.path, f]));
+            const changed: string[] = [];
+            for (const f of p.files) {
+              if (!f.path || !f.content) continue;
+              by.set(f.path, { path: f.path, content: f.content, lang: langOf(f.path) });
+              changed.push(f.path);
+            }
+            const files = [...by.values()];
+            setProject({ ...project, files, built: files.length, total: files.length });
+            if (changed[0]) setActivePath(changed[0]);
+            setChat((c) => [...c, { role: "ai", text: p.reply || "Ho gaya.", changed }]);
+            return;
+          }
+        } catch {
+          /* cloud edit */
+        }
+      }
+
       const res = await fetch("/api/build/edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

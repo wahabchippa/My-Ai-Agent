@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useStore, type Conversation } from "@/lib/store";
 import {
   PlusIcon, SearchIcon, StarIcon, TrashIcon, MoreVerticalIcon,
-  ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon,
+  ChatIcon, FolderIcon, CodeIcon, SettingsIcon, ShieldIcon, ImageIcon,
   SunIcon, MoonIcon, LogOutIcon, HelpCircleIcon,
 } from "../ui/icons";
 import { cn } from "@/utils/cn";
@@ -31,6 +31,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: "chat", label: "Chat", icon: ChatIcon },
   { id: "workspace", label: "Builder", icon: CodeIcon },
+  { id: "studio", label: "Studio", icon: ImageIcon },
   { id: "settings", label: "Settings", icon: SettingsIcon },
   { id: "admin", label: "Admin", icon: ShieldIcon, adminOnly: true },
 ];
@@ -178,7 +179,7 @@ export function Sidebar({ view, isOpen, onToggle, onViewChange, isAdmin, theme, 
         </>
       ) : (
         <div className="flex-1 flex items-center justify-center text-sm text-text-muted">
-          {view === "workspace" ? "Project Builder" : view === "settings" ? "Settings" : view === "admin" ? "Admin" : ""}
+          {view === "workspace" ? "Project Builder" : view === "studio" ? "Image & Video" : view === "settings" ? "Settings" : view === "admin" ? "Admin" : ""}
         </div>
       )}
 

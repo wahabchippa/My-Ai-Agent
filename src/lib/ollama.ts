@@ -16,6 +16,7 @@ export interface OllamaConfig {
 }
 
 const LOCAL = "http://localhost:11434/v1";
+const LOCAL_IP = "http://127.0.0.1:11434/v1";
 const TUNNEL = "https://curriculum-edit-involvement-adapters.trycloudflare.com/v1";
 
 export const DEFAULT_OLLAMA: OllamaConfig = {
@@ -56,7 +57,7 @@ export function normalizeOllamaBase(url: string): string {
 
 export function ollamaEndpoints(c: OllamaConfig): string[] {
   const out: string[] = [];
-  for (const raw of [LOCAL, c.baseUrl, c.fallbackUrl, TUNNEL]) {
+  for (const raw of [LOCAL, LOCAL_IP, c.baseUrl, c.fallbackUrl, TUNNEL]) {
     if (!raw?.trim()) continue;
     const n = normalizeOllamaBase(raw);
     if (n && !out.includes(n)) out.push(n);
@@ -189,4 +190,20 @@ export async function testOllama(
 
 export function explainOllama(err: unknown): string {
   return explainOllamaError(err);
+}
+
+/** Streaming ke baghair poora jawab — builder JSON ke liye. */
+export async function chatOllama(
+  cfg: OllamaConfig,
+  opts: {
+    system: string;
+    messages: { role: string; content: string }[];
+    signal?: AbortSignal;
+  },
+): Promise<string> {
+  let full = "";
+  await chatOllamaStream(cfg, opts, (p) => {
+    full = p;
+  });
+  return full;
 }

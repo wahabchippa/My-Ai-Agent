@@ -9,10 +9,11 @@ import { AuthScreen } from "./components/auth/AuthScreen";
 import { ChatView } from "./components/ChatView";
 import { WorkspaceView } from "./components/WorkspaceView";
 import { SettingsView } from "./components/SettingsView";
+import { StudioView } from "./components/StudioView";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { cn } from "./utils/cn";
 
-export type ViewType = "chat" | "workspace" | "admin" | "settings";
+export type ViewType = "chat" | "workspace" | "studio" | "admin" | "settings";
 
 function AppShell() {
   const { user, loading, logout } = useAuth();
@@ -90,6 +91,7 @@ function AppShell() {
           {view === "chat" && <ChatView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "admin" && user.isAdmin && <AdminDashboard email={user.email} />}
           {view === "workspace" && <WorkspaceView onOpenSidebar={() => setSidebarOpen(true)} />}
+          {view === "studio" && <StudioView onOpenSidebar={() => setSidebarOpen(true)} />}
           {view === "settings" && <SettingsView onOpenSidebar={() => setSidebarOpen(true)} />}
         </div>
       </main>
