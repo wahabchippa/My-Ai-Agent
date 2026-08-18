@@ -259,11 +259,19 @@ export async function POST(req: Request) {
 
   // ─── STEP 2: RESEARCH (parallel with nothing — ye pehle hona chahiye
   //     taake system prompt me chala jaye) ───
+  // 🔒 FACTUAL GUARD (server-side): "who is / founder / CEO / where" —
+  // in sawalon par model ko training se guess karne se ROKO. Research
+  // hamesha chalao, aur kuch na mile to jawab hi mat do.
+  const factualQ =
+    /\b(who is|who was|what is|what are|which|where|when|founder|ceo|president|prime minister|capital|invented|discovered|born|established|founded|headquarter|headquartered|owner|company)\b/i.test(
+      lastUser,
+    );
+
   let researchData = "";
   {
     // URL ho to hamesha padho — classifier ki raay ka intezar nahi.
     const urlP = hasUrl(lastUser) ? readUrlsIn(lastUser).catch(() => "") : null;
-    const searchP = c.needsWebSearch ? research(lastUser).catch(() => "") : null;
+    const searchP = c.needsWebSearch || factualQ ? research(lastUser).catch(() => "") : null;
     if (urlP || searchP) {
       const [pages, search] = await Promise.all([
         urlP ?? Promise.resolve(""),
@@ -271,6 +279,20 @@ export async function POST(req: Request) {
       ]);
       researchData = [pages, search].filter(Boolean).join("\n\n---\n\n");
     }
+  }
+
+  // 🚫 NO-GUESS GUARD: factual sawal + research khali → jawab hi nahi.
+  // Ghalat confident jawab "mujhe nahi pata" se 100x bura hai.
+  if (factualQ && !researchData.trim()) {
+    return new Response(
+      "🤷 **Mujhe is sawal ka verified jawab online nahi mila.**\n\n" +
+        "Main apni training se andaza laga sakta hoon, magar wo ghalat ho sakta hai — " +
+        "is liye main guess nahi kar raha. Kisi trusted source (official website, Wikipedia, news) se check kar lein.",
+      {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) },
+      },
+    );
   }
 
   // ─── STEP 3: SELECT ───
@@ -283,12 +305,18 @@ export async function POST(req: Request) {
   }
 
   const anyStale = agents.every((a) => isStale(a));
-  const system = buildSystem({
+  let system = buildSystem({
     personality: b.personality,
     research: researchData,
     stale: anyStale,
     cutoff: agents[0]?.cutoff,
   });
+  if (factualQ) {
+    system +=
+      "\n\n⚠️ FACTUAL QUESTION — STRICT RULE: Answer ONLY from the WEB RESEARCH block above. " +
+      "If the answer is not in the research, say plainly: \"mujhe is ka verified jawab nahi mila\". " +
+      "NEVER guess names, dates, numbers or facts from your training.";
+  }
 
   const dbg = (extra: Record<string, string> = {}) => ({
     "Content-Type": "text/plain; charset=utf-8",

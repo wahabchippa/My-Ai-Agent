@@ -792,6 +792,13 @@ export function ChatView({
           userText,
         );
 
+      // 🔒 TINY-MODEL GUARD: chhote models (0.5b-3b) factual sawalon par
+      // ghalat naam ghad dete hain (jaise 'John Doe') — unhe factual
+      // sawal hi mat do, seedha cloud/web path par bhejo.
+      const tinyLocal = /\b(0\.5b|0\.6b|1b|1\.5b|2b|3b|3\.1b|3\.2b|tiny|nano|mini|phi-?2)\b/i.test(
+        bestCfg.model,
+      );
+
       let localAnswer = "";
       let good = false;
 
@@ -857,8 +864,9 @@ export function ChatView({
         }
       };
 
-      if (!complex) {
+      if (!complex && !(factualQ && tinyLocal)) {
         // L1 — direct local (memory ke saath; correction par memory skip)
+        // 🔒 factual + tiny model → local ladder skip (guard upar hai)
         let sys = systemPrompt(personality) + (skipMem ? "" : await memoryForOllama(userText));
         if (!needWeb) good = await runLocal(sys);
 
@@ -983,11 +991,13 @@ export function ChatView({
           const hits = keyWords.filter((k) => researchTxt.includes(k)).length;
           verified = hasResults && hits >= 2;
           if (!verified) {
-            verifyNote =
-              "\n\n---\n*⚠️ **Imandari se**: ye jawab live web search se confirm NAHI hua — " +
-              "ho sakta hai ye purani ya ghalat maloomat ho. Zyada tehqeeq ke liye " +
-              "web search ON karke dobara poochein, ya kisi trusted source se check karein.*";
-            patchMessage(convId, assistantId, { thinking: [] });
+            // 🚫 Galat jawab dikhane se behtar: confirm na hone par answer
+            // hi hata do — 'John Doe' jaisa ghadha hua naam kabhi na dikhe.
+            finalText =
+              "🤷 **Mujhe is sawal ka verified jawab online nahi mila.**\n\n" +
+              "Jo jawab mila wo web search se confirm nahi hua, is liye main usay pesh nahi kar raha. " +
+              "Kisi trusted source (official website, Wikipedia, news) se check kar lein.";
+            patchMessage(convId, assistantId, { content: finalText, thinking: [] });
           } else {
             patchMessage(convId, assistantId, { thinking: ["✅ Web se confirm"] });
           }
