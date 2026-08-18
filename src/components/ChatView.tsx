@@ -7,7 +7,7 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
-import { chatOllama, chatOllamaStream, ollamaReady, ollamaReachable, hideModelName, type OllamaConfig } from "../lib/ollama";
+import { chatOllama, chatOllamaStream, ollamaReady, ollamaReachable, ollamaModels, pickBestModel, pickFastModel, hideModelName, type OllamaConfig } from "../lib/ollama";
 import { needsResearch, research } from "../lib/research";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
@@ -70,6 +70,68 @@ async function memoryForOllama(text: string): Promise<string> {
     return mem;
   } catch {
     return "";
+  }
+}
+
+/** SELF-REVIEW (Reflexion) — chhota tez model jawab ka review karta hai.
+ *  Sahi ho to "OK" bolta hai (original rehta hai); warna behtar version
+ *  deta hai. Code answers ke liye mat use karo (verify ho chuke hain). */
+async function reflectLocal(
+  cfg: OllamaConfig,
+  userText: string,
+  answer: string,
+): Promise<string> {
+  if (!answer.trim()) return answer;
+  try {
+    const out = await Promise.race([
+      chatOllama(cfg, {
+        system:
+          "You are a strict quality reviewer for a chat assistant. " +
+          "Improve the answer ONLY if it is wrong, incomplete, or confusing.",
+        messages: [
+          {
+            role: "user",
+            content:
+              `QUESTION:\n${userText.slice(0, 500)}\n\n` +
+              `DRAFT ANSWER:\n${answer.slice(0, 6000)}\n\n` +
+              'TASK: If the draft fully answers the question correctly and completely, ' +
+              'reply with exactly "OK". Otherwise reply ONLY with an improved, corrected, ' +
+              'more complete version — no explanations, no preamble, same language.',
+          },
+        ],
+        signal: AbortSignal.timeout(15000),
+      }),
+      new Promise<string>((resolve) => setTimeout(() => resolve(""), 15000)),
+    ]);
+    const t = out.trim();
+    if (!t || /^OK$/i.test(t)) return answer;
+    // Improved version tabhi accept karo jab itna content ho (behtar se
+    // kamzor na ho jaye). Chhota/short reply = reject, original rakho.
+    if (t.length < answer.length * 0.5) return answer;
+    return t;
+  } catch {
+    return answer;
+  }
+}
+
+/** Nexora Brain me achha jawab save karo — agli baar 0ms. Guest = skip. */
+async function saveBrain(question: string, answer: string): Promise<boolean> {
+  try {
+    const r = await fetch("/api/brain", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: question.slice(0, 300),
+        answer: answer.slice(0, 4000),
+        source: "local",
+      }),
+    });
+    if (!r.ok) return false;
+    const d = await r.json().catch(() => ({}));
+    return d?.ok === true;
+  } catch {
+    return false;
   }
 }
 
@@ -480,7 +542,20 @@ export function ChatView({
     // karta hai (polishLocal).
     if (!realConfig && !hasUrlIn(userText) && (await ollamaReachable(ollama))) {
       patchMessage(convId, assistantId, { thinking: ["Local AI soch raha hai…"] });
-      const triage = await localTriage(ollama, userText);
+
+      // ── LOCAL MODEL ENSEMBLE (naya) ──
+      // Multiple models installed hon to: answer ke liye SABSE TAQATWAR,
+      // triage/review ke liye sabse CHHOTA tez model. User ki setting
+      // respect hoti hai (pickBest/Fast current ko pehle rakhta hai).
+      const localModels = await ollamaModels(ollama).catch(() => null) ?? null;
+      const bestCfg: OllamaConfig = localModels?.length
+        ? { ...ollama, model: pickBestModel(localModels, ollama.model) }
+        : ollama;
+      const fastCfg: OllamaConfig = localModels?.length
+        ? { ...ollama, model: pickFastModel(localModels, ollama.model) }
+        : ollama;
+
+      const triage = await localTriage(fastCfg, userText);
       const needWeb = web || (triage?.web ?? needsResearch(userText));
       const isCode =
         triage?.mode === "code" ||
@@ -493,7 +568,7 @@ export function ChatView({
         try {
           let ok = false;
           await chatOllamaStream(
-            ollama,
+            bestCfg,
             {
               system: sys,
               messages: [...history, { role: "user", content: userText }],
@@ -577,12 +652,36 @@ export function ChatView({
           }
         }
 
+        // L2c — SELF-REVIEW (Reflexion, naya): chhota tez model final
+        // jawab ka EK dafa review karta hai. Code answers skip (verify
+        // ho chuke — review unhe bigad sakta hai).
+        let finalText = localAnswer;
+        let memoryNote = "";
+        if (good && !cancelRef.current && !isCode) {
+          patchMessage(convId, assistantId, { thinking: ["Reviewing answer…"] });
+          const reviewed = await reflectLocal(fastCfg, userText, localAnswer);
+          if (reviewed && reviewed !== localAnswer) {
+            finalText = reviewed;
+            patchMessage(convId, assistantId, { content: finalText });
+          }
+          patchMessage(convId, assistantId, { thinking: [] });
+        }
+
+        // 🧠 YAAD — achha local jawab Nexora Brain me save (agli baar 0ms)
+        if (good && !cancelRef.current) {
+          const saved = await saveBrain(userText, finalText);
+          if (saved) {
+            memoryNote =
+              "\n\n---\n*🧠 Ye jawab Nexora Brain me yaad ho gaya — agli baar foran milega.*";
+          }
+        }
+
         if (good && !cancelRef.current) {
           setPipelineInfo({
-            agents: needWeb ? "Local AI + Web" : isCode ? "Local AI + Verify" : "Local AI",
+            agents: needWeb ? "Local AI + Web" : isCode ? "Local AI + Verify" : "Local AI + Review",
             orchestrator: hideModelName(ollama.model) || "Ollama",
           });
-          patchMessage(convId, assistantId, { content: localAnswer, streaming: false });
+          patchMessage(convId, assistantId, { content: finalText + memoryNote, streaming: false });
           setLocalStream(false);
           return;
         }

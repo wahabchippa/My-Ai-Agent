@@ -80,3 +80,47 @@ export async function DELETE(req: NextRequest) {
   await db.delete(memories).where(and(eq(memories.id, n), eq(memories.userId, userId)));
   return Response.json({ ok: true, deleted: n });
 }
+
+/** Ek achha jawab Nexora Brain me mehfooz karo — agli baar 0ms me milega.
+ *  Client-side (Ollama-first) answers is se save hote hain. */
+export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId(req);
+  if (!userId) return Response.json({ ok: false, error: "not-logged-in" }, { status: 401 });
+  if (!db) return Response.json({ ok: false, error: "no-db" }, { status: 503 });
+
+  const { question, answer, source } = await req.json().catch(() => ({}));
+  if (!question || !answer || typeof question !== "string" || typeof answer !== "string") {
+    return Response.json({ ok: false, error: "bad-body" }, { status: 400 });
+  }
+
+  // Dedup — same sawal dobara save na ho (last 50 me dhoondo)
+  const norm = (s: string) => s.toLowerCase().replace(/\W+/g, " ").trim().slice(0, 60);
+  const needle = norm(question);
+  const recent = await db
+    .select({ content: memories.content })
+    .from(memories)
+    .where(eq(memories.userId, userId))
+    .orderBy(desc(memories.createdAt))
+    .limit(50);
+  for (const r of recent) {
+    try {
+      const p = JSON.parse(r.content) as { q?: string };
+      if (p?.q && norm(p.q) === needle) {
+        return Response.json({ ok: true, skipped: true });
+      }
+    } catch { /* purana format */ }
+  }
+
+  const content = JSON.stringify({
+    v: 1,
+    q: question.slice(0, 300),
+    a: answer.slice(0, 4000),
+    src: typeof source === "string" && source ? source.slice(0, 30) : "local",
+    at: new Date().toISOString(),
+    hits: 0,
+    kw: [],
+  });
+  await db.insert(memories).values({ userId, content });
+  return Response.json({ ok: true });
+}
+

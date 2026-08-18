@@ -249,3 +249,61 @@ export async function chatOllama(
   });
   return full;
 }
+
+// ── LOCAL MODEL ENSEMBLE ────────────────────────────────────────────
+// Agar user ke paas MULTIPLE Ollama models hain, to:
+//   • pickBestModel  — answer ke liye sabse taqatwar model (70b > 34b >
+//                      27b > 14b > 13b > 8b > 7b > 3b > 1.5b)
+//   • pickFastModel  — triage/review ke liye sabse chhota tez model
+// User ki khud ki setting (Settings → Local AI) hamesha respect hoti hai.
+
+const SIZE_ORDER = [
+  "70b", "34b", "27b", "32b", "22b", "14b", "13b", "12b", "9b", "8b",
+  "7b", "6b", "3.1", "3b", "2b", "1.5b", "1b", "0.5b", "0.6b",
+];
+
+function sizeScore(m: string): number {
+  const low = m.toLowerCase();
+  for (let i = 0; i < SIZE_ORDER.length; i++) {
+    if (low.includes(SIZE_ORDER[i])) return (SIZE_ORDER.length - i) * 10;
+  }
+  return 0;
+}
+
+/** Installed models ki list (sirf local endpoints, 2s timeout). */
+export async function ollamaModels(cfg: OllamaConfig): Promise<string[] | null> {
+  for (const base of [LOCAL, LOCAL_IP, normalizeOllamaBase(cfg.baseUrl)]) {
+    if (!base) continue;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2000);
+      const res = await fetch(`${base.replace(/\/+$/, "")}/models`, {
+        headers: authHeaders(cfg),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const models: string[] = (data?.data ?? data?.models ?? [])
+          .map((m: { id?: string; name?: string }) => m.id || m.name)
+          .filter(Boolean);
+        if (models.length) return models;
+      }
+    } catch {
+      /* agla endpoint */
+    }
+  }
+  return null;
+}
+
+/** Answer ke liye behtareen model — user ki setting pehle. */
+export function pickBestModel(models: string[], current?: string): string {
+  if (current && models.includes(current)) return current;
+  return [...models].sort((a, b) => sizeScore(b) - sizeScore(a))[0] || current || "";
+}
+
+/** Triage/review ke liye sabse halka model — user ki setting pehle. */
+export function pickFastModel(models: string[], current?: string): string {
+  if (current && models.includes(current)) return current;
+  return [...models].sort((a, b) => sizeScore(a) - sizeScore(b))[0] || current || "";
+}
