@@ -23,7 +23,7 @@ import { downloadZip } from "../lib/zip";
 import { cn } from "../utils/cn";
 import { MenuIcon, ArrowUp, CheckIcon, CopyIcon, SparkleIcon, StopIcon } from "./icons";
 import { useStore } from "../lib/store";
-import { chatOllama, ollamaReady } from "../lib/ollama";
+import { chatOllama, ollamaReady, ollamaReachable } from "../lib/ollama";
 
 interface Props {
   onOpenSidebar?: () => void;
@@ -175,6 +175,33 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
     };
 
     try {
+      // ── LOCAL-FIRST — Ollama main engine ──
+      // Builder bhi ab local AI se shuru hota hai (free, private, tez).
+      // Cloud (web search + multi-model) sirf tab jab local na ban
+      // paye ya Ollama mojood na ho.
+      if (ollamaReady(ollama) && (await ollamaReachable(ollama))) {
+        try {
+          const raw = await chatOllama(ollama, {
+            system:
+              "Reply ONLY JSON, no fence:\\n" +
+              '{"name":"kebab-name","summary":"one line","stack":"html,css,js","files":[{"path":"index.html","content":"FULL file"}]}\\n' +
+              "3 to 7 complete files. Whole contents. Prefer HTML+CSS+JS that opens in a browser.",
+            messages: [{ role: "user", content: t }],
+            signal: ac.signal,
+          });
+          const p = parseJsonObj<{ name?: string; summary?: string; stack?: string; files?: { path: string; content: string }[] }>(raw);
+          if (p?.files?.length && apply({ ...p, files: p.files.map((f) => ({ ...f, lang: langOf(f.path) })) })) {
+            setError("");
+            return;
+          }
+          setError("Local ne theek JSON na diya — cloud try kar raha hai...");
+        } catch (e) {
+          if ((e as Error).name === "AbortError") return;
+          setError("Local fail — cloud try kar raha hai...");
+        }
+      }
+
+      // Cloud support — web search + multi-model (/api/build)
       try {
         const res = await fetch("/api/build", {
           method: "POST",
@@ -184,27 +211,10 @@ export function WorkspaceView({ onOpenSidebar }: Props) {
         });
         const d = await res.json();
         if (d.ok && apply(d as Project)) return;
-        setError(d.message || d.error || "Cloud nahi chala — local try...");
+        setError(d.message || d.error || "Project nahi ban saka");
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         setError((e as Error).message || "Network error");
-      }
-
-      // Cloud fail — local master rescue (browser se Ollama)
-      if (ollamaReady(ollama)) {
-        const raw = await chatOllama(ollama, {
-          system:
-            "Reply ONLY JSON, no fence:\\n" +
-            '{"name":"kebab-name","summary":"one line","stack":"html,css,js","files":[{"path":"index.html","content":"FULL file"}]}\\n' +
-            "3 to 7 complete files. Whole contents. Prefer HTML+CSS+JS that opens in a browser.",
-          messages: [{ role: "user", content: t }],
-          signal: ac.signal,
-        });
-        const p = parseJsonObj<{ name?: string; summary?: string; stack?: string; files?: { path: string; content: string }[] }>(raw);
-        if (p?.files?.length && apply({ ...p, files: p.files.map((f) => ({ ...f, lang: langOf(f.path) })) })) {
-          setError("");
-          return;
-        }
       }
       setError((prev) => prev || "Project nahi ban saka");
     } catch (e) {

@@ -78,6 +78,35 @@ export function ollamaEndpoints(c: OllamaConfig): string[] {
   return out;
 }
 
+/**
+ * Ollama asal me chal raha hai? SIRF local endpoints ping karta hai
+ * (1.5s timeout) — taake bina Ollama wale users ko koi der na lage
+ * aur remote/tunnel endpoint ke intezar me na phansein.
+ */
+export async function ollamaReachable(cfg: OllamaConfig): Promise<boolean> {
+  const candidates = new Set<string>([
+    LOCAL,
+    LOCAL_IP,
+    normalizeOllamaBase(cfg.baseUrl),
+  ]);
+  for (const base of candidates) {
+    if (!base) continue;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 1500);
+      const r = await fetch(`${base.replace(/\/+$/, "")}/models`, {
+        headers: authHeaders(cfg),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (r.ok) return true;
+    } catch {
+      /* agla endpoint */
+    }
+  }
+  return false;
+}
+
 function authHeaders(cfg: OllamaConfig): Record<string, string> {
   return {
     "Content-Type": "application/json",

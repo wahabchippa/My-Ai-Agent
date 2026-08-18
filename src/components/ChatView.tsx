@@ -7,12 +7,25 @@ import { MessageItem, firstCodeBlock, LANG_FILE } from "./Message";
 import { ChatInput } from "./ChatInput";
 import { getPersonality, type PersonalityId } from "../lib/personalities";
 import { chatReal, chatServer, chatStream, systemPrompt, resolveActive, explainError, browserOk, getProvider, hasProxy } from "../lib/realai";
-import { chatOllamaStream, ollamaReady, hideModelName } from "../lib/ollama";
+import { chatOllamaStream, ollamaReady, ollamaReachable, hideModelName } from "../lib/ollama";
+import { needsResearch } from "../lib/research";
 import { ArtifactsPanel, type Artifact } from "./ArtifactsPanel";
 import { SparkleIcon, BoltIcon, BookIcon, PencilIcon } from "./icons";
 import { cn } from "../utils/cn";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── OLLAMA-FIRST HELPERS ─────────────────────────────────────────────
+// Nexora ka MAIN engine ab local Ollama hai. Ye helpers decide karte
+// hain kab local bole aur kab cloud (web search + multi-model) support
+// ban jata hai.
+
+/** Kya is sawal ko FRESH data chahiye? (Ollama ki training purani ho
+ *  sakti hai) — URL ho, ya current-events keywords hon. */
+function needsFreshData(text: string): boolean {
+  if (/https?:\/\/|\b(?:github|gitlab|npmjs|stackoverflow)\.com\//i.test(text)) return true;
+  return needsResearch(text);
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -377,6 +390,54 @@ export function ChatView({
         // khali screen dena sab se bura natija hai.
         patchMessage(convId, assistantId, { trace: undefined });
       }
+    }
+
+    // ── OLLAMA-FIRST — LOCAL AI MAIN ENGINE ────────────────────────────
+    // Nexora ka asli engine ab LOCAL Ollama hai: free, private, tez.
+    // Cloud models + web search SIRF SUPPORT hain — jab sawal ko fresh
+    // data chahiye (web toggle ON, URL, current events) ya Ollama
+    // jawab na de saka, tabhi cloud aage aata hai.
+    if (!realConfig && !web && !needsFreshData(userText) && (await ollamaReachable(ollama))) {
+      let localOk = false;
+      try {
+        await chatOllamaStream(
+          ollama,
+          {
+            system: systemPrompt(personality),
+            messages: [...history, { role: "user", content: userText }],
+            signal: AbortSignal.timeout(25_000),
+          },
+          (partial) => {
+            if (!cancelRef.current) patchMessage(convId, assistantId, { content: partial });
+          },
+        )
+          .then((t) => {
+            const junk =
+              !t.trim() ||
+              t.trim().length < 15 ||
+              /^(i (don't|do not|cannot|can't|am unable)|sorry|mujhe nahi pata|main nahi jaanta)/i.test(
+                t.trim(),
+              );
+            localOk = !junk;
+            if (localOk && !cancelRef.current) {
+              setPipelineInfo({ agents: "Local AI", orchestrator: hideModelName(ollama.model) || "Ollama" });
+              patchMessage(convId, assistantId, { content: t, streaming: false });
+              setLocalStream(false);
+            }
+          })
+          .catch(() => {
+            localOk = false;
+          });
+      } catch {
+        localOk = false;
+      }
+      if (localOk) return;
+      if (cancelRef.current) {
+        setLocalStream(false);
+        return;
+      }
+      // Ollama khali/fail — cloud (research + multi-model) sambhalta hai.
+      patchMessage(convId, assistantId, { thinking: ["Local AI ne jawab na diya — cloud le raha hai"] });
     }
 
     // MASTER CONSENSUS: ALL models work in parallel → master AI synthesizes → stream.
