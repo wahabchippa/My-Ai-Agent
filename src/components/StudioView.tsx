@@ -13,7 +13,22 @@ interface Props {
 }
 
 type Kind = "image" | "edit" | "video";
-type Item = { id: string; kind: Kind; prompt: string; url: string; ts: number };
+type Item = { id: string; kind: Kind; prompt: string; url: string; ts: number; via?: string };
+
+const LS = "nexora-studio-v1";
+
+async function pollinationsImage(prompt: string): Promise<string> {
+  const url =
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
+    `?model=flux&width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+  await new Promise<void>((ok, bad) => {
+    const img = new Image();
+    img.onload = () => ok();
+    img.onerror = () => bad(new Error("Pollinations image nahi bani"));
+    img.src = url;
+  });
+  return url;
+}
 
 const LS = "nexora-studio-v1";
 
@@ -66,7 +81,11 @@ export function StudioView({ onOpenSidebar }: Props) {
     });
     const d = await res.json().catch(() => ({}));
     const url = (d.url || d.image || d.video) as string | undefined;
-    if (!url) throw new Error(d.error || d.message || "Generation fail");
+    if (!url) {
+      const err = new Error(d.error || d.message || "Generation fail") as Error & { code?: string };
+      err.code = d.code || (res.status === 402 || res.status === 400 ? "credits" : "fail");
+      throw err;
+    }
     return url;
   };
 
@@ -82,49 +101,54 @@ export function StudioView({ onOpenSidebar }: Props) {
     setBusy(true);
     try {
       let url = "";
+      let via = "";
+      let outKind: Kind = kind;
+
       if (kind === "image") {
-        // naya face / scene — keyless
-        url =
-          `https://image.pollinations.ai/prompt/${encodeURIComponent(t)}` +
-          `?model=flux&width=1024&height=1024&nologo=true&seed=${Date.now()}`;
-        await new Promise<void>((ok, bad) => {
-          const img = new Image();
-          img.onload = () => ok();
-          img.onerror = () => bad(new Error("Image nahi bani"));
-          img.src = url;
-        });
-      } else if (kind === "edit") {
-        // asli photo badlo — ModelsLab img2img (init_image pehle se API me)
-        url = await callLab("https://modelslab.com/api/v6/realtime/img2img", {
-          model_id: "flux",
-          init_image: photo,
-          width: 768,
-          height: 768,
-          output_type: "png",
-        });
-      } else if (photo) {
-        url = await callLab("https://modelslab.com/api/v6/video/img2video", {
-          model_id: "svd",
-          init_image: photo,
-          width: 512,
-          height: 512,
-          num_frames: 16,
-          output_type: "mp4",
-        });
+        url = await pollinationsImage(t);
+        via = "Pollinations";
       } else {
-        if (!t) {
-          setErr("Prompt likho ya photo daalo.");
-          return;
+        try {
+          if (kind === "edit") {
+            url = await callLab("https://modelslab.com/api/v6/realtime/img2img", {
+              model_id: "flux",
+              init_image: photo,
+              width: 768,
+              height: 768,
+              output_type: "png",
+            });
+          } else if (photo) {
+            url = await callLab("https://modelslab.com/api/v6/video/img2video", {
+              model_id: "svd",
+              init_image: photo,
+              width: 512,
+              height: 512,
+              num_frames: 16,
+              output_type: "mp4",
+            });
+          } else {
+            if (!t) {
+              setErr("Prompt likho ya photo daalo.");
+              return;
+            }
+            url = await callLab("https://modelslab.com/api/v6/video/text2video", {
+              model_id: "svd",
+              width: 512,
+              height: 512,
+              num_frames: 16,
+              output_type: "mp4",
+            });
+          }
+          via = "ModelsLab";
+        } catch {
+          // credits / key nahi — Pollinations still
+          const fb = t || "photorealistic cinematic portrait";
+          url = await pollinationsImage(kind === "edit" ? `photorealistic edit: ${fb}` : fb);
+          via = "Pollinations (ModelsLab credits nahi)";
+          outKind = "image";
         }
-        url = await callLab("https://modelslab.com/api/v6/video/text2video", {
-          model_id: "svd",
-          width: 512,
-          height: 512,
-          num_frames: 16,
-          output_type: "mp4",
-        });
       }
-      save([{ id: String(Date.now()), kind, prompt: t || "photo", url, ts: Date.now() }, ...items]);
+      save([{ id: String(Date.now()), kind: outKind, prompt: t || "photo", url, ts: Date.now(), via }, ...items]);
       setPrompt("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation fail");
@@ -275,7 +299,10 @@ export function StudioView({ onOpenSidebar }: Props) {
                 ) : (
                   <img src={it.url} alt={it.prompt} className="aspect-square w-full object-cover" />
                 )}
-                <figcaption className="line-clamp-2 px-3 py-2 text-[11.5px] text-muted">{it.prompt}</figcaption>
+                <figcaption className="line-clamp-2 px-3 py-2 text-[11.5px] text-muted">
+                  {it.via && <span className="mb-0.5 block text-[10px] text-muted-2">{it.via}</span>}
+                  {it.prompt}
+                </figcaption>
               </figure>
             ))}
           </div>

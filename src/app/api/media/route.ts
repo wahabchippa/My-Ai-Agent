@@ -18,7 +18,9 @@ interface MediaBody {
   output_type?: string;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+function isCredits(status: number, msg: string): boolean {
+  return status === 402 || /credit|quota|payment|insufficient|balance|limit|expired|no key/i.test(msg);
+}
 
 async function poll(fetchResult: string, key: string): Promise<string | null> {
   for (let i = 0; i < 18; i++) {
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
   const key = (b?.key || process.env.MODELSLAB_API_KEY || "").trim();
   if (!b || !key) {
     return NextResponse.json(
-      { error: "ModelsLab key nahi. Vercel me MODELSLAB_API_KEY daalo." },
+      { error: "ModelsLab key nahi.", code: "credits" },
       { status: 400, headers: corsHeaders }
     );
   }
@@ -85,8 +87,9 @@ export async function POST(req: Request) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
+      const msg = String(d?.message || d?.error || `ModelsLab error (${r.status})`);
       return NextResponse.json(
-        { error: d?.message || `ModelsLab error (${r.status})` },
+        { error: msg, code: isCredits(r.status, msg) ? "credits" : "fail" },
         { status: 502, headers: corsHeaders }
       );
     }
@@ -116,12 +119,13 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json(
-      { error: d?.message || "Unexpected ModelsLab response." },
+      { error: d?.message || "Unexpected ModelsLab response.", code: isCredits(200, String(d?.message || "")) ? "credits" : "fail" },
       { status: 502, headers: corsHeaders }
     );
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Proxy error";
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Proxy error" },
+      { error: msg, code: isCredits(500, msg) ? "credits" : "fail" },
       { status: 500, headers: corsHeaders }
     );
   }
