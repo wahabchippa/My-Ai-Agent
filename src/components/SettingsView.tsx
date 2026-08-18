@@ -14,6 +14,8 @@ export function SettingsView({ onOpenSidebar }: Props) {
   const [user, setUser] = useState<any>(null);
   const [ollamaTest, setOllamaTest] = useState<"idle" | "ping" | "ok" | "fail">("idle");
   const [ollamaMsg, setOllamaMsg] = useState("");
+  // 🔒 Installed models — chhote models par warning dikhane ke liye
+  const [localModels, setLocalModels] = useState<string[]>([]);
   // Nexora Brain — user ko dikhna chahiye ke yaadasht me kya hai, aur
   // ghalat yaad mitane ka raasta bhi ho. Warna wo "jadoo ka dabba" hai.
   const [brain, setBrain] = useState<{
@@ -110,6 +112,25 @@ export function SettingsView({ onOpenSidebar }: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* 🔒 SIZE WARNING — chhota model factual sawalon par ghalat
+                  jawab deta hai. 'Latest' ka matlab bara nahi hota:
+                  qwen3:0.6b / qwen2.5:0.5b / 1.5b / 3b / 4b — ye
+                  hallucinate karte hain. 7b+ chahiye. */}
+              {localModels.length > 0 &&
+                (() => {
+                  const cur = ollama.model || "";
+                  const tiny = /(0\.5b|0\.6b|1b|1\.1b|1\.5b|2b|3b|3\.1b|4b|tiny|nano|mini|phi-?2)/i.test(cur);
+                  const bad = tiny && localModels.some((m) => m === cur || cur === "");
+                  return bad ? (
+                    <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-600 dark:text-amber-400">
+                      ⚠️ <b>{cur || "Chhota model"}</b> bohot chhota hai — ye factual sawalon
+                      par ghalat jawab de sakta hai (naam ghad sakta hai).
+                      <br />Bada model install karein: <code className="rounded bg-black/10 px-1">ollama pull qwen2.5:7b</code>{" "}
+                      ya <code className="rounded bg-black/10 px-1">ollama pull llama3.1:8b</code>
+                    </div>
+                  ) : null;
+                })()}
+
               <button
                 onClick={async () => {
                   setOllamaTest("ping");
@@ -117,6 +138,7 @@ export function SettingsView({ onOpenSidebar }: Props) {
                   const r = await testOllama(ollama);
                   if (r.ok) {
                     setOllamaTest("ok");
+                    setLocalModels(r.models ?? []);
                     let viaHost = r.via;
                     try { viaHost = new URL(r.via).host; } catch { /* jaise diya */ }
                     setOllamaMsg(
