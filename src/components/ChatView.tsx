@@ -543,6 +543,10 @@ export function ChatView({
       convId = newChat(mdl);
     }
 
+    // 🔒 FIX: edit ke baad prefill khali karo — warna wohi text agle
+    // send par dobara input me aa sakta tha.
+    setPrefill(null);
+
     const userMsg = {
       id: newId(),
       role: "user" as const,

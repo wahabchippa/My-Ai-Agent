@@ -301,24 +301,31 @@ export async function POST(req: Request) {
     ...corsHeaders(req),
   });
 
+  // ── VERCEL DEADLINE ──
+  // Vercel function 60s par kaat deta hai. Pehle timeouts 25-30s the aur
+  // cascade + synthesis ka koi waqt-check nahi tha — worst case 60s se
+  // zyada ho kar 504 milta tha. Ab 5s safety margin ke saath har bade
+  // qadam se pehle check: waqt nahi to jo mila hai wohi wapas.
+  const DEADLINE = 55_000;
+
   // ─── STEP 4a: SINGLE-MODEL PATH ───
   if (!c.needsConsensus) {
     let { result, attempts } = await raceModels(agents, system, messages, {
-      timeoutMs: 25000,
+      timeoutMs: 20000,
       useGrounding: c.needsWebSearch, // Gemini apna Google Search chalayega
     });
 
     // CASCADE — agar chune hue agents fail ho gaye (429/500/timeout), to
     // baaki POOL bhi try karo. Pehle app yahin haar maan leti thi, chahe
-    // Groq/OpenRouter bilkul theek hon.
-    if (!result.ok) {
+    // Groq/OpenRouter bilkul theek hon. (Sirf tab jab waqt bacha ho.)
+    if (!result.ok && Date.now() - t0 < DEADLINE - 20_000) {
       const rest = pool
         .filter((e) => !agents.includes(e))
         .sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b))
         .slice(0, 6);
       if (rest.length) {
         const retry = await raceModels(rest, system, messages, {
-          timeoutMs: 25000,
+          timeoutMs: 20000,
           useGrounding: c.needsWebSearch,
         });
         attempts = [...attempts, ...retry.attempts];
@@ -355,25 +362,28 @@ export async function POST(req: Request) {
 
   // ─── STEP 4b: CONSENSUS PATH ───
   const results = await Promise.all(
-    agents.map((a) => callModel(a, system, messages, { timeoutMs: 25000, useGrounding: c.needsWebSearch }))
+    agents.map((a) => callModel(a, system, messages, { timeoutMs: 20000, useGrounding: c.needsWebSearch }))
   );
   const good = results.filter((r) => r.ok && r.text.trim().length > 40);
 
   if (!good.length) {
     // CASCADE — consensus agents fail hue to baaki pool try karo.
-    const rest = pool
-      .filter((e) => !agents.includes(e))
-      .sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b))
-      .slice(0, 6);
-    if (rest.length) {
-      const retry = await raceModels(rest, system, messages, {
-        timeoutMs: 25000,
-        useGrounding: c.needsWebSearch,
-      });
-      if (retry.result.ok) {
-        return new Response(retry.result.text, {
-          headers: dbg({ "X-Nexora-Model": retry.result.model, "X-Nexora-Note": "cascade-recovery" }),
+    // (Sirf tab jab waqt bacha ho — warna waqt khatam hone par 504.)
+    if (Date.now() - t0 < DEADLINE - 20_000) {
+      const rest = pool
+        .filter((e) => !agents.includes(e))
+        .sort((a, b) => scoreEntry(c, a) - scoreEntry(c, b))
+        .slice(0, 6);
+      if (rest.length) {
+        const retry = await raceModels(rest, system, messages, {
+          timeoutMs: 20000,
+          useGrounding: c.needsWebSearch,
         });
+        if (retry.result.ok) {
+          return new Response(retry.result.text, {
+            headers: dbg({ "X-Nexora-Model": retry.result.model, "X-Nexora-Note": "cascade-recovery" }),
+          });
+        }
       }
     }
     const errs = results.map((r) => `• ${r.provider}: ${r.error}`).join("\n");
@@ -429,9 +439,11 @@ RULES:
     .filter((e) => !isStale(e) && e.envKey)
     .sort((a, b) => a.rank - b.rank)[0];
 
-  if (synth) {
+  // Synthesis ke liye bhi waqt budget — 15s se kam bacha ho to pehla
+  // acha jawab hi de do (504 se behtar).
+  if (synth && Date.now() - t0 < DEADLINE - 15_000) {
     const sr = await callModel(synth, masterSystem, [{ role: "user", content: masterInput }], {
-      timeoutMs: 30000,
+      timeoutMs: 20000,
       temperature: 0.4,
     });
     if (sr.ok) {

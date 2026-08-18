@@ -96,10 +96,16 @@ export function ArtifactsPanel({
   };
 
   const openTab = () => {
-    const blob = new Blob([artifact.code], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    // 🔒 Pehle blob URL se khulta tha (same-origin = app ke data tak
+    // access). Ab content sessionStorage me dal kar sandboxed preview
+    // page khulta hai — naya tab sessionStorage inherit karta hai, aur
+    // wahan iframe `sandbox` (bina allow-same-origin) me render hota hai.
+    try {
+      sessionStorage.setItem("nexora-artifact", artifact.code);
+    } catch {
+      /* quota — openTab silently skip */
+    }
+    window.open("/artifact-preview", "_blank");
   };
 
   return (

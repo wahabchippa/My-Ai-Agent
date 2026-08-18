@@ -27,7 +27,10 @@ function isCredits(status: number, msg: string): boolean {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function poll(fetchResult: string, key: string): Promise<string | null> {
-  for (let i = 0; i < 18; i++) {
+  // 🔒 Vercel function maxDuration = 60s — pehle 18 × 5s = 90s tak poll
+  // hota tha, matlab function 60s par mar jata aur user ko adhoora
+  // response milta. Ab 10 × 5s = 50s — budget ke andar.
+  for (let i = 0; i < 10; i++) {
     await sleep(5000);
     try {
       const r = await fetch(fetchResult, {
