@@ -156,3 +156,41 @@ export function sanitizeMessages<T extends { role: string; content: string }>(
 export function safeForLog(text: string, max = 200): string {
   return sanitize(text, { aggressive: true }).text.slice(0, max);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// SVG SANITIZER — AI-generated SVG ko `dangerouslySetInnerHTML` se
+// render karne se PEHLE is se guzarna ZAROORI hai.
+//
+// Masla: model (ya prompt-injection) `<script>`, `onload=...`, ya
+// `javascript:` URLs wala SVG emit kar sakta hai — seedha render karne
+// par stored XSS hota hai, har user ke browser me.
+// ═══════════════════════════════════════════════════════════════════
+
+/** SVG string se scripts, event handlers aur javascript: URLs hatao. */
+export function sanitizeSvg(raw: string): string {
+  if (!raw) return raw;
+
+  let out = raw;
+
+  // <script>...</script> (kisi bhi form me)
+  out = out.replace(/<script[\s\S]*?<\/script\s*>/gi, "");
+  out = out.replace(/<script[^>]*\/?>/gi, "");
+
+  // on*="..." event handlers (onload, onclick, onerror, ...)
+  out = out.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+
+  // javascript: / data: URLs in href / xlink:href
+  out = out.replace(
+    /\s(?:xlink:)?href\s*=\s*("(?:javascript|data):[^"]*"|'(?:javascript|data):[^']*'|[^\s>]*(?:javascript|data):[^\s>]*)/gi,
+    ' href="#"'
+  );
+
+  // embed-able / external-loading tags
+  out = out.replace(
+    /<\s*(foreignObject|iframe|object|embed|link|style|form|input|button)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+    ""
+  );
+  out = out.replace(/<\s*(foreignObject|iframe|object|embed|link|style|form|input|button)[^>]*\/?>/gi, "");
+
+  return out;
+}

@@ -17,8 +17,9 @@
 //     Express server ka code ghalat nahi hota, bas yahan chal nahi sakta.
 // ═══════════════════════════════════════════════════════════════════
 
-export interface VerifyResult {
-  /** Code mila aur chalaya ja saka? */
+import { internalSecret } from "./internalSecret";
+
+export interface VerifyResult {  /** Code mila aur chalaya ja saka? */
   attempted: boolean;
   /** Bina error ke chala? */
   passed: boolean;
@@ -110,7 +111,10 @@ export async function verifyCode(markdown: string, origin: string): Promise<Veri
   try {
     const r = await fetch(`${origin}/api/execute`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": internalSecret(),
+      },
       body: JSON.stringify({ code: makeRunnable(code) }),
       signal: AbortSignal.timeout(8000),
     });

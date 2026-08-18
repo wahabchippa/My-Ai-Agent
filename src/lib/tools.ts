@@ -22,6 +22,7 @@
 import { research } from "./research";
 import { readUrl, readGitHubRepo } from "./webFetch";
 import { lookup } from "./knowledge";
+import { internalSecret } from "./internalSecret";
 
 export interface ToolCall {
   tool: string;
@@ -77,7 +78,12 @@ export const TOOLS: ToolSpec[] = [
     run: async (code, ctx) => {
       const r = await fetch(`${ctx.origin}/api/execute`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // /api/execute ab auth-gated hai — server-to-server call
+          // internal secret ke sath hoti hai (browser cookie nahi).
+          "x-internal-secret": internalSecret(),
+        },
         body: JSON.stringify({ code, language: "javascript" }),
         signal: AbortSignal.timeout(10_000),
       }).catch(() => null);

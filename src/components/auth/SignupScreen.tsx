@@ -82,14 +82,14 @@ export function SignupScreen({ onSuccess, onSwitchToLogin }: SignupScreenProps) 
           </div>
           <h1 className="text-xl font-bold text-text mb-2">Check your email</h1>
           <p className="text-sm text-text-secondary mb-6">
-            We've sent a verification link to <strong className="text-text">{email}</strong>.
+            We&apos;ve sent a verification link to <strong className="text-text">{email}</strong>.
             Click the link to verify your account.
           </p>
           <button onClick={onSwitchToLogin} className="btn btn-primary w-full">
             Back to login
           </button>
           <p className="mt-4 text-xs text-text-muted">
-            Didn't receive the email? Check your spam folder or{" "}
+            Didn&apos;t receive the email? Check your spam folder or{" "}
             <button className="text-accent hover:underline">resend</button>
           </p>
         </div>

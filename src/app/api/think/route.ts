@@ -21,6 +21,7 @@ import { sanitizeMessages } from "@/lib/sanitize";
 import { runReactLoop, type Step } from "@/lib/reactLoop";
 import { recall, remember } from "@/lib/nexoraBrain";
 import { getSessionUserId } from "@/lib/sessionUser";
+import { guardApi } from "@/lib/guard";
 
 export const maxDuration = 60;
 
@@ -58,6 +59,13 @@ function pickChain(pool: Entry[], n = 3): Entry[] {
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
+
+  // ── AUTH GATE (guest per-IP limit) ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return Response.json({ ok: false, error: guard.error }, { status: guard.status });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();

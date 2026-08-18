@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { apiKeys } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { getUser } from "@/lib/accessControl";
 import { randomBytes, createHash } from "crypto";
 
@@ -44,6 +44,23 @@ export async function DELETE(req: Request) {
   const user = await getUser(req);
   if (!user || !db) return NextResponse.json({ error: "Auth required" }, { status: 401 });
   const { id } = await req.json();
-  await db.update(apiKeys).set({ status: "revoked" }).where(eq(apiKeys.id, parseInt(id)));
+
+  // ── IDOR FIX ──
+  // Pehle sirf `apiKeys.id` par delete hota tha — koi bhi user kisi bhi
+  // user ki key revoke kar sakta tha (sequential ids). Ab userId filter
+  // lazmi hai, aur NaN ids reject hoti hain.
+  const keyId = parseInt(String(id), 10);
+  if (!Number.isFinite(keyId)) {
+    return NextResponse.json({ error: "Invalid key id" }, { status: 400 });
+  }
+
+  const result = await db
+    .update(apiKeys)
+    .set({ status: "revoked" })
+    .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, user.id)));
+
+  if ((result.rowCount ?? 0) === 0) {
+    return NextResponse.json({ error: "Key not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

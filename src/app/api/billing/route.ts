@@ -37,6 +37,18 @@ export async function POST(req: Request) {
   const { action, planSlug } = await req.json();
 
   if (action === "change_plan" && planSlug) {
+    // ── 🔒 PAYMENT GATE ──
+    // Pehle koi bhi logged-in user bina payment ke `premium` bana leta
+    // tha (credits + paid invoice ke sath). Payment system (Stripe) abhi
+    // implement nahi hua — is liye paid plans sirf ADMIN badal sakta hai.
+    // Free plan par downgrade sab ke liye allowed hai.
+    if (planSlug !== "free" && !requireAdmin(user)) {
+      return NextResponse.json(
+        { error: "Plan changes are disabled until payments are configured. Contact support." },
+        { status: 403 }
+      );
+    }
+
     const newPlan = await db.select().from(plans).where(eq(plans.slug, planSlug)).limit(1);
     if (!newPlan.length) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 

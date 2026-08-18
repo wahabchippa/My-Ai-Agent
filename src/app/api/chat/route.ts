@@ -11,6 +11,9 @@
 import { NextResponse } from "next/server";
 import { recallMemories, rememberFact, clearAllMemory, extractFact } from "@/lib/memory";
 import { getSessionUserId } from "@/lib/sessionUser";
+import { guardApi, corsHeaders as cors } from "@/lib/guard";
+import { isSafeUrl } from "@/lib/safeUrl";
+import { safeCalc } from "@/lib/safeCalc";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
@@ -88,14 +91,13 @@ const ENSEMBLES: Record<string, string[]> = {
   ],
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Origin-aware CORS — `*` nahi (scripted abuse band karne ke liye).
+function corsHeaders(req?: Request): Record<string, string> {
+  return cors(req);
+}
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
 // Vercel: allow up to 60s per function.
@@ -675,14 +677,15 @@ async function gatherContext(message: string): Promise<string> {
   );
 
   // 0c) REAL CALCULATOR — exact math for "calculate X" / "what is 3*(4+5)".
+  // 🔒 Purana code `Function()` se eval karta tha (code-injection risk).
+  // Ab ek chhota recursive-descent parser hai — sirf numbers + + - * / % ^ ( ).
   const cm = message.match(/(?:calculate|what is|compute|solve|=)\s*([\d\s+\-*/().^%]+)\??/i);
   if (cm && /[\d]/.test(cm[1]) && /[+\-*/^%]/.test(cm[1])) {
     try {
-      const expr = cm[1].trim().replace(/\^/g, "**");
-      if (/^[\d\s+\-*/().%]+$/.test(expr)) {
-        // eslint-disable-next-line no-new-func
-        const result = Function(`"use strict";return (${expr})`)();
-        if (typeof result === "number" && isFinite(result))
+      const expr = cm[1].trim();
+      if (/^[\d\s+\-*/().^%]+$/.test(expr)) {
+        const result = safeCalc(expr);
+        if (result !== null && isFinite(result))
           facts.push(`Calculator: ${cm[1].trim()} = ${result}.`);
       }
     } catch {
@@ -1025,10 +1028,12 @@ async function gatherContext(message: string): Promise<string> {
     }
 
     // 24j) PHONE VALIDATION (numverify) — "validate this number 923001234567"
+    // 🔒 Pehle API key source me hardcoded thi (public repo!) — ab env se.
     const phonem = q.match(/(?:validate|check|lookup|whose|carrier|verify).*(?:number|phone|mobile)[:\s]*([+]?[\d\s-]{7,15})/i);
-    if (phonem) {
+    const apilayerKey = process.env.APILAYER_API_KEY;
+    if (phonem && apilayerKey) {
       const num = phonem[1].replace(/[\s+-]/g, "");
-      const nv = await get(`https://apilayer.net/api/validate?access_key=0f78a1bb2ff03d7fe938dfcee5224214&number=${num}`);
+      const nv = await get(`https://apilayer.net/api/validate?access_key=${apilayerKey}&number=${num}`);
       if (nv?.valid) {
         facts.push(`Phone lookup: ${nv.international_format} is VALID. Country: ${nv.country_name}. Line type: ${nv.line_type}. Carrier: ${nv.carrier || "unknown"}.`);
       } else if (nv) {
@@ -1104,11 +1109,23 @@ async function runAnthropic(endpoint: string, apiKey: string, b: Body): Promise<
 }
 
 export async function POST(req: Request) {
+  // ── AUTH GATE ──
+  // Pehle yahan koi check nahi tha: koi bhi bina login ke server keys ka
+  // quota jala sakta tha. Ab logged-in users chaltay hain; guests ko
+  // per-IP limit milti hai.
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return NextResponse.json(
+      { error: guard.error },
+      { status: guard.status, headers: corsHeaders(req) }
+    );
+  }
+
   const b = (await req.json().catch(() => null)) as Body | null;
   if (!b || !Array.isArray(b.messages)) {
     return NextResponse.json(
       { error: "Missing messages in body." },
-      { status: 400, headers: corsHeaders }
+      { status: 400, headers: corsHeaders(req) }
     );
   }
 
@@ -1117,6 +1134,19 @@ export async function POST(req: Request) {
 
     // 1) Full provider spec → use the caller's own key (Models page).
     if (b.apiKey && b.format && b.endpoint) {
+      // ── SSRF GUARD ──
+      // Ye endpoint client se aata hai aur server use fetch karta hai.
+      // Pehle private/local/metadata IPs blocked nahi the — internal
+      // services scan ki ja sakti thin (live proof: localhost hit hua).
+      const safe = await isSafeUrl(b.endpoint, {
+        allowPrivate: process.env.NEXORA_ALLOW_PRIVATE_ENDPOINTS === "1",
+      });
+      if (!safe.ok) {
+        return NextResponse.json(
+          { error: `Endpoint not allowed: ${safe.reason}` },
+          { status: 400, headers: corsHeaders(req) }
+        );
+      }
       if (b.format === "gemini") text = await runGemini(b.endpoint, b.apiKey, b);
       else if (b.format === "anthropic")
         text = await runAnthropic(b.endpoint, b.apiKey, b);
@@ -1190,11 +1220,11 @@ export async function POST(req: Request) {
       } // end image else
     }
 
-    return NextResponse.json({ text }, { headers: corsHeaders });
+    return NextResponse.json({ text }, { headers: corsHeaders(req) });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Proxy error" },
-      { status: 502, headers: corsHeaders }
+      { status: 502, headers: corsHeaders(req) }
     );
   }
 }

@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script src="https://js.puter.com/v2/"></script>
+        <script src="https://js.puter.com/v2/" defer />
       </head>
       <body>{children}</body>
     </html>

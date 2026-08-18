@@ -19,20 +19,29 @@ export function LoginScreen({ onSuccess, onSwitchToSignup, onSwitchToForgotPassw
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
-  const [error, setError] = useState("");
+  // auth_error ko effect me set karne ke bajaye lazily init (lint fix —
+  // behavior same: URL param mount par hi pick hota hai)
+  const [error, setError] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const url = new URL(window.location.href);
+      const e = url.searchParams.get("auth_error");
+      if (e) {
+        url.searchParams.delete("auth_error");
+        window.history.replaceState({}, "", url.pathname + (url.search || ""));
+      }
+      return e || "";
+    } catch {
+      return "";
+    }
+  });
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [githubAvailable, setGithubAvailable] = useState(false);
 
-  // Pick up auth_error from URL (OAuth redirect)
+  // Pick up auth_success from URL (OAuth redirect)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const authError = url.searchParams.get("auth_error");
-    if (authError) {
-      setError(authError);
-      url.searchParams.delete("auth_error");
-      window.history.replaceState({}, "", url.pathname + (url.search || ""));
-    }
     // OAuth success is handled in useAuth via server session
     const authSuccess = url.searchParams.get("auth_success");
     if (authSuccess) {

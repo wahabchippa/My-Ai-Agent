@@ -20,21 +20,24 @@ const CACHE_KEY = "nexora_user_cache";
  * cookie is the real authentication proof.
  */
 export function useAuth() {
-  const [user, setUserState] = useState<AppUser | null>(null);
+  // Cached user ko effect me set karne ke bajaye lazily init karo —
+  // same result (instant UI), lekin effect me sync setState nahi
+  // (react-hooks/set-state-in-effect lint fix).
+  const [user, setUserState] = useState<AppUser | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.email) return parsed as AppUser;
+      }
+    } catch {}
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   // On mount: show cached user instantly, then verify with server
   useEffect(() => {
     let cancelled = false;
-
-    // 1. Show cached user immediately (avoids flash)
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.email) setUserState(parsed);
-      }
-    } catch {}
 
     // 2. Verify session with server (source of truth)
     fetch("/api/auth/me", { credentials: "include" })

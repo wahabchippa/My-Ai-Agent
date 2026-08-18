@@ -39,18 +39,18 @@ import { research, needsResearch } from "@/lib/research";
 import { readUrlsIn, hasUrl } from "@/lib/webFetch";
 import { sanitizeMessages } from "@/lib/sanitize";
 import { recall, remember } from "@/lib/nexoraBrain";
+import { guardApi, corsHeaders as cors } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+// Origin-aware CORS — `*` nahi (scripted key-abuse band karne ke liye).
+function corsHeaders(req?: Request): Record<string, string> {
+  return cors(req);
+}
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 type Mode = "fast" | "balanced" | "deep";
@@ -155,11 +155,24 @@ function selectAgents(c: Classification, mode: Mode, pool: Entry[]): Entry[] {
 
 export async function POST(req: Request) {
   const t0 = Date.now();
+
+  // ── AUTH GATE ──
+  // Pehle koi check nahi tha: koi bhi bina login ke server keys ka quota
+  // jala sakta tha. Ab logged-in users plan limits ke saath chaltay hain;
+  // guests per-IP limit ke saath.
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return new Response(JSON.stringify({ error: guard.error }), {
+      status: guard.status,
+      headers: { "Content-Type": "application/json", ...corsHeaders(req) },
+    });
+  }
+
   const b = await req.json().catch(() => null);
   if (!b?.messages?.length) {
     return new Response(JSON.stringify({ error: "Missing messages" }), {
       status: 400,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json", ...corsHeaders(req) },
     });
   }
 
@@ -196,7 +209,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "X-Nexora-Error": "no-provider-configured",
-        ...corsHeaders,
+        ...corsHeaders(req),
       },
     });
   }
@@ -220,7 +233,7 @@ export async function POST(req: Request) {
           "X-Nexora-Provider": "local",
           "X-Nexora-Brain": "hit",
           "X-Nexora-Brain-Score": String(hit.score),
-          ...corsHeaders,
+          ...corsHeaders(req),
         },
       });
     }
@@ -285,7 +298,7 @@ export async function POST(req: Request) {
     "X-Nexora-Ms": String(Date.now() - t0),
     ...(clean.redacted ? { "X-Nexora-Redacted": clean.kinds.join(",") } : {}),
     ...extra,
-    ...corsHeaders,
+    ...corsHeaders(req),
   });
 
   // ─── STEP 4a: SINGLE-MODEL PATH ───

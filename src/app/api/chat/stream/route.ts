@@ -2,17 +2,17 @@
 // Only falls back to other models if Groq fails. Quality over speed.
 
 import { AIRFORCE_KEY } from "@/lib/keys";
+import { guardApi, corsHeaders as cors } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function corsHeaders(req?: Request): Record<string, string> {
+  return cors(req);
+}
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 type Msg = { role: string; content: string };
@@ -84,8 +84,14 @@ async function agentResearch(query: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  // ── AUTH GATE (guest per-IP limit) ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return new Response(guard.error, { status: guard.status, headers: corsHeaders(req) });
+  }
+
   const b = await req.json().catch(() => null);
-  if (!b?.messages) return new Response("Missing messages", { status: 400 });
+  if (!b?.messages) return new Response("Missing messages", { status: 400, headers: corsHeaders(req) });
 
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -131,7 +137,7 @@ ANSWER STYLE:
       streamOpenAI("https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile", system, b.messages, groqKey),
       8000
     );
-    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) } });
   } catch {
     // Groq failed — try alternatives IN ORDER of intelligence
   }
@@ -142,7 +148,7 @@ ANSWER STYLE:
       streamOpenAI("https://api.bazaarlink.ai/v1/chat/completions", "deepseek/deepseek-v4-flash:free", system, b.messages, blKey),
       6000
     );
-    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) } });
   } catch {}
 
   // FALLBACK 2: OpenAPIs Claude (if online)
@@ -151,7 +157,7 @@ ANSWER STYLE:
       streamOpenAI("https://api.openapis.online/openai/v1/chat/completions", "claude-sonnet-4-6", system, b.messages, "admin"),
       5000
     );
-    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) } });
   } catch {}
 
   // FALLBACK 3: AirForce Mistral Large
@@ -160,7 +166,7 @@ ANSWER STYLE:
       streamOpenAI("https://api.airforce/v1/chat/completions", "mistral-large-latest", system, b.messages, AIRFORCE_KEY()),
       6000
     );
-    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) } });
   } catch {}
 
   // LAST RESORT: OpenRouter / LLM7 (less smart but always available)
@@ -175,8 +181,8 @@ ANSWER STYLE:
 
   try {
     const stream = await Promise.any(lastResort);
-    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders } });
+    return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders(req) } });
   } catch {
-    return new Response("__STREAM_FAILED__", { status: 502, headers: corsHeaders });
+    return new Response("__STREAM_FAILED__", { status: 502, headers: corsHeaders(req) });
   }
 }

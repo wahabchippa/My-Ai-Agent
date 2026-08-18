@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { otpCodes } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { randomInt } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ export async function POST(req: Request) {
   if ((recent[0]?.count || 0) >= 3)
     return NextResponse.json({ error: "Too many requests. Wait 10 minutes." }, { status: 429 });
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  // 🔒 Pehle `Math.random()` tha — crypto-secure nahi, predictable.
+  const code = String(randomInt(100000, 1000000));
   await db.insert(otpCodes).values({
     email,
     code,
@@ -51,6 +53,16 @@ export async function POST(req: Request) {
     }
   }
 
-  // Dev mode: return the code directly (no email service configured)
-  return NextResponse.json({ sent: false, code });
+  // 🔒 FIX (2026-08-18): Pehle ye code PRODUCTION me bhi response me
+  // wapas bhejta tha agar email service fail ho jaye — matlab \"OTP
+  // verification\" ka koi matlab nahi (attacker apna code khud parh
+  // leta). Ab code sirf NON-production me return hota hai (dev
+  // convenience); production me bina email ke sirf `sent: false`.
+  if (process.env.NODE_ENV !== "production") {
+    return NextResponse.json({ sent: false, code });
+  }
+  return NextResponse.json({
+    sent: false,
+    error: "Email service not configured. Contact support.",
+  });
 }

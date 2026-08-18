@@ -39,6 +39,37 @@ function CodeView({ code }: { code: string }) {
 
 type Mode = "preview" | "split" | "code";
 
+// 🔒 FIX: Ye pehle ArtifactsPanel ke ANDAR define tha — har render par
+// naya component type banta tha (react-hooks/static-components error,
+// state remount bugs). Ab top-level hai.
+function Seg({
+  id,
+  icon: Icon,
+  label,
+  mode,
+  onSelect,
+}: {
+  id: Mode;
+  icon: typeof GlobeIcon;
+  label: string;
+  mode: Mode;
+  onSelect: (m: Mode) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition",
+        mode === id
+          ? "bg-cream-deep text-ink dark:bg-night-surface dark:text-cream"
+          : "text-muted hover:text-ink-soft dark:hover:text-cream"
+      )}
+    >
+      <Icon size={13} /> {label}
+    </button>
+  );
+}
+
 export function ArtifactsPanel({
   artifact,
   onClose,
@@ -70,28 +101,6 @@ export function ArtifactsPanel({
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   };
-
-  const Seg = ({
-    id,
-    icon: Icon,
-    label,
-  }: {
-    id: Mode;
-    icon: typeof GlobeIcon;
-    label: string;
-  }) => (
-    <button
-      onClick={() => setMode(id)}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition",
-        mode === id
-          ? "bg-cream-deep text-ink dark:bg-night-surface dark:text-cream"
-          : "text-muted hover:text-ink-soft dark:hover:text-cream"
-      )}
-    >
-      <Icon size={13} /> {label}
-    </button>
-  );
 
   return (
     <div
@@ -140,9 +149,9 @@ export function ArtifactsPanel({
       {/* toolbar */}
       {preview && (
         <div className="flex items-center gap-1 border-b border-line px-2 py-1.5 dark:border-night-surface">
-          <Seg id="preview" icon={GlobeIcon} label="Preview" />
-          <Seg id="split" icon={SparkleIcon} label="Split" />
-          <Seg id="code" icon={FileIcon} label="Code" />
+          <Seg id="preview" icon={GlobeIcon} label="Preview" mode={mode} onSelect={setMode} />
+          <Seg id="split" icon={SparkleIcon} label="Split" mode={mode} onSelect={setMode} />
+          <Seg id="code" icon={FileIcon} label="Code" mode={mode} onSelect={setMode} />
         </div>
       )}
 

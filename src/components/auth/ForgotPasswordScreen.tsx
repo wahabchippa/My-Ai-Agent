@@ -48,13 +48,13 @@ export function ForgotPasswordScreen({ onSwitchToLogin }: ForgotPasswordScreenPr
           <h1 className="text-xl font-bold text-text mb-2">Check your email</h1>
           <p className="text-sm text-text-secondary mb-6">
             If an account exists with <strong className="text-text">{email}</strong>,
-            you'll receive a password reset link shortly.
+            you&apos;ll receive a password reset link shortly.
           </p>
           <button onClick={onSwitchToLogin} className="btn btn-primary w-full">
             Back to login
           </button>
           <p className="mt-4 text-xs text-text-muted">
-            Didn't receive the email? Check your spam folder or try again.
+            Didn&apos;t receive the email? Check your spam folder or try again.
           </p>
         </div>
       </AuthLayout>
@@ -67,7 +67,7 @@ export function ForgotPasswordScreen({ onSwitchToLogin }: ForgotPasswordScreenPr
         <div className="mb-6 text-center">
           <h1 className="text-xl font-bold text-text mb-1">Forgot password?</h1>
           <p className="text-sm text-text-secondary">
-            Enter your email and we'll send you a reset link
+            Enter your email and we&apos;ll send you a reset link
           </p>
         </div>
 

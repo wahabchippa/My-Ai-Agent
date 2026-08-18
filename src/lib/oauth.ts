@@ -19,17 +19,32 @@ export type OAuthProvider = "google" | "github";
 // ═══════════════════════════════════════════
 // STATE MANAGEMENT — CSRF protection
 // ═══════════════════════════════════════════
-// In-memory store for OAuth state tokens (short-lived, 10 min TTL)
-// In production, use Redis or DB. For this app the serverless instance
-// stays alive long enough for the redirect round-trip.
+// 🔒 FIX (2026-08-18): Pehle state sirf in-memory Map me rehti thi.
+// Serverless (Vercel) par har invocation alag instance ho sakta hai —
+// callback us instance par aaye jahan state maujood na ho → login
+// intermittently 500 deta tha. Ab jab `OAUTH_STATE_SECRET` set ho,
+// state HMAC-se signed hoti hai (stateless — kisi bhi instance par
+// validate ho jati hai). Secret na ho to purana in-memory fallback.
 const stateStore = new Map<string, { provider: OAuthProvider; createdAt: number }>();
 const STATE_TTL = 10 * 60 * 1000; // 10 minutes
+const STATE_SECRET = process.env.OAUTH_STATE_SECRET || "";
+
+function signState(payload: string): string {
+  return createHash("sha256").update(payload + STATE_SECRET).digest("base64url");
+}
 
 export function generateOAuthState(provider: OAuthProvider): string {
-  // Clean expired states
+  // Clean expired states (sirf fallback store ke liye)
   const now = Date.now();
   for (const [key, val] of stateStore) {
     if (now - val.createdAt > STATE_TTL) stateStore.delete(key);
+  }
+
+  if (STATE_SECRET) {
+    const payload = Buffer.from(
+      JSON.stringify({ p: provider, exp: now + STATE_TTL })
+    ).toString("base64url");
+    return `${payload}.${signState(payload)}`;
   }
 
   const state = randomBytes(32).toString("hex");
@@ -38,6 +53,21 @@ export function generateOAuthState(provider: OAuthProvider): string {
 }
 
 export function validateOAuthState(state: string): OAuthProvider | null {
+  if (STATE_SECRET) {
+    const dot = state.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const payload = state.slice(0, dot);
+    const sig = state.slice(dot + 1);
+    if (sig !== signState(payload)) return null; // forged/changed state
+    try {
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString());
+      if (Date.now() > data.exp) return null;
+      return data.p as OAuthProvider;
+    } catch {
+      return null;
+    }
+  }
+
   const entry = stateStore.get(state);
   if (!entry) return null;
 
@@ -256,17 +286,19 @@ async function fetchGitHubProfile(accessToken: string): Promise<OAuthProfile> {
 
     if (emailRes.ok) {
       const emails: { email: string; primary: boolean; verified: boolean }[] = await emailRes.json();
-      // Prefer primary+verified, then any verified, then any
+      // 🔒 FIX (2026-08-18): Pehle unverified email bhi accept hoti thi.
+      // Attacker apne GitHub me victim ka email add kar ke (unverified)
+      // uski EXISTING account se link ho sakta tha → account takeover.
+      // Ab SIRF verified emails use hoti hain.
       const primary = emails.find((e) => e.primary && e.verified);
       const verified = emails.find((e) => e.verified);
-      const any = emails[0];
-      email = primary?.email || verified?.email || any?.email;
+      email = primary?.email || verified?.email || null;
     }
   }
 
   if (!email) {
     throw new Error(
-      "No email address associated with this GitHub account. Please add a verified email to your GitHub profile."
+      "No verified email address associated with this GitHub account. Please add and verify an email on GitHub."
     );
   }
 

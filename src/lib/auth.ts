@@ -4,7 +4,7 @@
 
 import { db } from "@/db";
 import { users, sessions, oauthAccounts, loginAttempts } from "@/db/schema";
-import { eq, and, gte, sql, desc } from "drizzle-orm";
+import { eq, and, or, gte, sql, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "crypto";
 
@@ -107,11 +107,17 @@ export async function checkRateLimit(email: string, ip: string): Promise<{ allow
   
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW);
   
+  // 🔒 FIX (2026-08-18): Pehle sirf IP count hota tha — attacker IP
+  // rotate kar ke bypass kar sakta tha, aur NAT ke peeche poore users
+  // ek saath block ho jate the. Ab IP YA email dono count hote hain.
   const attempts = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(loginAttempts)
     .where(and(
-      eq(loginAttempts.ipAddress, ip),
+      or(
+        eq(loginAttempts.ipAddress, ip),
+        eq(loginAttempts.email, email.toLowerCase())
+      ),
       gte(loginAttempts.createdAt, windowStart)
     ));
   
@@ -330,7 +336,11 @@ export async function resendVerificationEmail(email: string): Promise<{ success:
     .where(eq(users.id, user.id));
   
   // TODO: Send verification email
-  console.log(`[AUTH] New verification token for ${email}: ${verifyToken}`);
+  // 🔒 Token sirf dev me log karo — production logs me plaintext reset
+  // tokens ka matlab account hijack hai agar logs leak hon.
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[AUTH] New verification token for ${email}: ${verifyToken}`);
+  }
   
   return { success: true };
 }
@@ -357,7 +367,10 @@ export async function requestPasswordReset(email: string): Promise<{ success: bo
     .where(eq(users.id, user.id));
   
   // TODO: Send password reset email
-  console.log(`[AUTH] Password reset token for ${email}: ${resetToken}`);
+  // 🔒 Token sirf dev me log karo (production me plaintext = hijack risk).
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[AUTH] Password reset token for ${email}: ${resetToken}`);
+  }
   
   return { success: true };
 }
@@ -562,12 +575,14 @@ export async function getUserSessions(userId: number, currentToken?: string): Pr
 export async function revokeSession(userId: number, sessionId: number): Promise<boolean> {
   if (!db) return false;
   
+  // 🔒 FIX: Pehle hamesha `true` return hota tha — galat id par bhi UI
+  // \"session revoked\" dikhata tha. Ab delete ka result check hota hai.
   const result = await db.delete(sessions).where(and(
     eq(sessions.id, sessionId),
     eq(sessions.userId, userId)
   ));
   
-  return true;
+  return (result.rowCount ?? 0) > 0;
 }
 
 // ═══════════════════════════════════════════

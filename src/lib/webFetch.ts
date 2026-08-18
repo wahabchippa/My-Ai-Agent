@@ -15,6 +15,8 @@
 //   aur GitHub links ke liye API se poora structured data aata hai.
 // ═══════════════════════════════════════════════════════════════════
 
+import { isSafeUrl } from "./safeUrl";
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
 
@@ -205,6 +207,14 @@ function htmlToText(html: string): string {
  * pages ko render kar deta hai). Ek nakaam ho to doosra chalta hai.
  */
 export async function readUrl(url: string): Promise<string> {
+  // ── 🔒 SSRF GUARD ──
+  // Agent/user diya hua koi bhi URL server-side fetch hota hai. Pehle
+  // private/local/metadata IPs ka koi check nahi tha. Ab hamesha strict.
+  const safe = await isSafeUrl(url);
+  if (!safe.ok) {
+    return `PAGE: ${url}\nSTATUS: Ye URL fetch nahi ho saka (${safe.reason}). User ko bata do ke link allowed nahi hai — is ke mazmoon ke baare me andaza mat lagao.`;
+  }
+
   // GitHub ke liye API behtar hai
   if (GH_RE.test(url)) {
     const gh = await readGitHubRepo(url);

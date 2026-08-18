@@ -18,17 +18,16 @@ export async function POST(req: Request) {
   try {
     const { ip, userAgent } = getClientInfo(req);
     
-    // Rate limiting
-    const rateCheck = await checkRateLimit("login", ip);
+    // Rate limiting — IP + email dono par (body se email nikalo)
+    const body = await req.json().catch(() => ({}));
+    const { email, password, rememberMe } = body;
+    const rateCheck = await checkRateLimit(typeof email === "string" ? email : "login", ip);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many login attempts. Please try again later." },
         { status: 429, headers: { "Retry-After": String(rateCheck.retryAfter) } }
       );
     }
-    
-    const body = await req.json().catch(() => ({}));
-    const { email, password, rememberMe } = body;
     
     // Validation
     if (!email || typeof email !== "string") {

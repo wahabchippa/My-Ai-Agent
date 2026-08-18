@@ -49,6 +49,7 @@ import { verifyCode, buildFixPrompt, type VerifyResult } from "@/lib/verify";
 import { sanitizeMessages } from "@/lib/sanitize";
 import { recall, remember } from "@/lib/nexoraBrain";
 import { getSessionUserId } from "@/lib/sessionUser";
+import { guardApi, corsHeaders as cors } from "@/lib/guard";
 import {
   SPECIALISTS,
   classifyTask,
@@ -78,18 +79,14 @@ const SYNTH_RESERVE_MS = 22_000;
 const VERIFY_RESERVE_MS = 4_000;
 const AGENT_MAX_MS = 20_000;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+const corsHeaders = (req?: Request): Record<string, string> => cors(req);
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 /** GET — UI ke liye specialists ki list. */
-export async function GET() {
+export async function GET(req: Request) {
   return Response.json(
     {
       specialists: SPECIALISTS.map((s) => ({
@@ -102,7 +99,7 @@ export async function GET() {
         source: s.source,
       })),
     },
-    { headers: corsHeaders }
+    { headers: corsHeaders(req) }
   );
 }
 
@@ -598,6 +595,12 @@ If you catch yourself writing a plan, stop and write the deliverable instead.`;
 }
 
 export async function POST(req: Request) {
+  // ── AUTH GATE (guest per-IP limit) ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return Response.json({ ok: false, error: guard.error }, { status: guard.status });
+  }
+
   const b = await req.json().catch(() => null);
   const wantsStream =
     new URL(req.url).searchParams.get("stream") === "1" || b?.stream === true;
@@ -626,7 +629,7 @@ export async function POST(req: Request) {
         verified: null,
         ms: 0,
       };
-      if (!wantsStream) return Response.json(payload, { headers: corsHeaders });
+      if (!wantsStream) return Response.json(payload, { headers: corsHeaders(req) });
       const enc0 = new TextEncoder();
       return new Response(
         new ReadableStream({
@@ -637,7 +640,7 @@ export async function POST(req: Request) {
         }),
         {
           headers: {
-            ...corsHeaders,
+            ...corsHeaders(req),
             "Content-Type": "application/x-ndjson; charset=utf-8",
             "Cache-Control": "no-cache, no-transform",
           },
@@ -678,7 +681,7 @@ export async function POST(req: Request) {
     });
     return new Response(stream, {
       headers: {
-        ...corsHeaders,
+        ...corsHeaders(req),
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
@@ -692,11 +695,11 @@ export async function POST(req: Request) {
   if (res.type === "error") {
     return Response.json(
       { error: res.error, message: res.message },
-      { status: res.status, headers: corsHeaders }
+      { status: res.status, headers: corsHeaders(req) }
     );
   }
   if (userId && brainTask && res.type === "done" && res.final) {
     remember(userId, brainTask, res.final, String(res.synthesizedBy ?? "agents")).catch(() => {});
   }
-  return Response.json(full.value ?? res, { headers: corsHeaders });
+  return Response.json(full.value ?? res, { headers: corsHeaders(req) });
 }

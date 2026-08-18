@@ -1,5 +1,6 @@
 import type { ModelId } from "./models";
 import { lookup } from "./knowledge";
+import { safeCalc } from "./safeCalc";
 import {
   detectLang,
   phrase,
@@ -156,14 +157,10 @@ function tryMath(prompt: string): string | null {
     .trim();
   if (!/^[-+/*().\d\s]+$/.test(cleaned)) return null;
   if (!/\d/.test(cleaned) || !/[-+/*]/.test(cleaned)) return null;
-  try {
-    // eslint-disable-next-line no-new-func
-    const value = Function(`"use strict";return (${cleaned});`)();
-    if (typeof value !== "number" || !isFinite(value)) return null;
-    return `\`${cleaned.replace(/\s+/g, " ")}\` = **${Number(value.toFixed(8))}**`;
-  } catch {
-    return null;
-  }
+  // 🔒 Pehle `Function()` eval tha (code-injection risk) — ab safe parser.
+  const value = safeCalc(cleaned);
+  if (value === null) return null;
+  return `\`${cleaned.replace(/\s+/g, " ")}\` = **${Number(value.toFixed(8))}**`;
 }
 
 /* ----------------------------- subject util ------------------------------- */

@@ -5,6 +5,8 @@
 // polls the fetch_result URL a few times before returning the video URL.
 
 import { NextResponse } from "next/server";
+import { guardApi, corsHeaders as cors } from "@/lib/guard";
+import { isSafeUrl } from "@/lib/safeUrl";
 
 interface MediaBody {
   key: string;
@@ -47,24 +49,43 @@ async function poll(fetchResult: string, key: string): Promise<string | null> {
   return null;
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const corsHeaders = (req?: Request): Record<string, string> => cors(req);
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export async function POST(req: Request) {
+  // ── AUTH GATE (guest per-IP limit) ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return NextResponse.json(
+      { error: guard.error, code: "auth" },
+      { status: guard.status, headers: corsHeaders(req) }
+    );
+  }
+
   const b = (await req.json().catch(() => null)) as MediaBody | null;
   // Client key ya Vercel env — ek dafa set
   const key = (b?.key || process.env.MODELSLAB_API_KEY || "").trim();
   if (!b || !key) {
     return NextResponse.json(
       { error: "ModelsLab key nahi.", code: "credits" },
-      { status: 400, headers: corsHeaders }
+      { status: 400, headers: corsHeaders(req) }
+    );
+  }
+
+  // ── SSRF GUARD ──
+  // `endpoint` client se aata hai aur server use fetch karta hai (sath
+  // me key bhi body me hoti hai). Pehle private/internal endpoints allowed
+  // the — attacker apna endpoint bhej kar key chura sakta tha.
+  const safe = await isSafeUrl(b.endpoint, {
+    allowPrivate: process.env.NEXORA_ALLOW_PRIVATE_ENDPOINTS === "1",
+  });
+  if (!safe.ok) {
+    return NextResponse.json(
+      { error: `Endpoint not allowed: ${safe.reason}`, code: "fail" },
+      { status: 400, headers: corsHeaders(req) }
     );
   }
 
@@ -92,7 +113,7 @@ export async function POST(req: Request) {
       const msg = String(d?.message || d?.error || `ModelsLab error (${r.status})`);
       return NextResponse.json(
         { error: msg, code: isCredits(r.status, msg) ? "credits" : "fail" },
-        { status: 502, headers: corsHeaders }
+        { status: 502, headers: corsHeaders(req) }
       );
     }
     // immediate success
@@ -100,7 +121,7 @@ export async function POST(req: Request) {
       const url = d.output[0] as string;
       return NextResponse.json(
         { url, video: url, image: url, status: "success" },
-        { headers: corsHeaders }
+        { headers: corsHeaders(req) }
       );
     }
     // queued — poll the fetch_result endpoint
@@ -109,7 +130,7 @@ export async function POST(req: Request) {
       if (url)
         return NextResponse.json(
           { url, video: url, image: url, status: "success" },
-          { headers: corsHeaders }
+          { headers: corsHeaders(req) }
         );
       return NextResponse.json(
         {
@@ -117,18 +138,18 @@ export async function POST(req: Request) {
           fetch: d.fetch_result,
           message: "Still generating. Try again in a moment, or poll the link.",
         },
-        { headers: corsHeaders }
+        { headers: corsHeaders(req) }
       );
     }
     return NextResponse.json(
       { error: d?.message || "Unexpected ModelsLab response.", code: isCredits(200, String(d?.message || "")) ? "credits" : "fail" },
-      { status: 502, headers: corsHeaders }
+      { status: 502, headers: corsHeaders(req) }
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Proxy error";
     return NextResponse.json(
       { error: msg, code: isCredits(500, msg) ? "credits" : "fail" },
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: corsHeaders(req) }
     );
   }
 }

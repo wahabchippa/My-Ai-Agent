@@ -19,6 +19,7 @@ import { available, type Entry } from "@/lib/modelRegistry";
 import { callModel } from "@/lib/aiCall";
 import { sanitize } from "@/lib/sanitize";
 import { hasUrl, readUrlsIn } from "@/lib/webFetch";
+import { guardApi } from "@/lib/guard";
 
 export const maxDuration = 60;
 
@@ -144,6 +145,15 @@ RULES:
 - Keep it focused: this file does its job and nothing else.`;
 
 export async function POST(req: NextRequest) {
+  // ── AUTH GATE (guest per-IP limit) ──
+  const guard = await guardApi(req, { allowAnon: true });
+  if (!guard.ok) {
+    return new Response(JSON.stringify({ error: guard.error }), {
+      status: guard.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const t0 = Date.now();
   let body: Record<string, unknown>;
   try {

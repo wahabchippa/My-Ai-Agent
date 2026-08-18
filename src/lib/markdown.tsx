@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "../components/icons";
 import { cn } from "../utils/cn";
+import { sanitizeSvg } from "./sanitize";
 
 /**
  * A small, dependency-free Markdown renderer tuned for chat answers.
@@ -105,6 +106,9 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   const isSvg =
     (lang ?? "").toLowerCase() === "svg" ||
     (/^\s*<svg[\s>]/i.test(code) && /<\/svg>\s*$/i.test(code.trim()));
+  // 🔒 AI-generated SVG kabhi bharosa nahi — scripts/handlers hata kar
+  // render karo (XSS prevention). Download/copy asli code ka hota hai.
+  const safeSvg = isSvg ? sanitizeSvg(code) : "";
   const [showCode, setShowCode] = useState(false);
   const copy = () => {
     navigator.clipboard?.writeText(code).then(() => {
@@ -118,7 +122,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
         <div className="flex flex-col items-center gap-2 border-b border-white/10 bg-[repeating-conic-gradient(#f7f6f3_0_25%,#ffffff_0_50%)] bg-[length:16px_16px] p-4">
           <div
             className="flex max-h-[320px] w-full items-center justify-center overflow-hidden [&>svg]:max-h-[300px] [&>svg]:max-w-full"
-            dangerouslySetInnerHTML={{ __html: code }}
+            dangerouslySetInnerHTML={{ __html: safeSvg }}
           />
           <div className="flex gap-2">
             <button

@@ -116,7 +116,19 @@ function getAdminPlan() {
 export function isModelAllowed(modelId: string, planConfig: any): boolean {
   if (planConfig.allowedModels === "*") return true;
   const allowed = planConfig.allowedModels.split(",");
-  return allowed.some((m: string) => modelId.startsWith(m.trim()) || modelId.includes(m.trim()));
+  // 🔒 FIX: Pehle `includes()` tha — "gpt-oss-120b" ki list "gpt-oss-1"
+  // wale entry ko bhi match kara deti thi (substring collisions).
+  // Ab exact / prefix-with-separator match hota hai.
+  return allowed.some((m: string) => {
+    const mm = m.trim();
+    if (!mm) return false;
+    return (
+      modelId === mm ||
+      modelId.startsWith(mm + ":") ||
+      modelId.startsWith(mm + "-") ||
+      modelId.startsWith(mm + "/")
+    );
+  });
 }
 
 /** Check usage limits for the current month. */
